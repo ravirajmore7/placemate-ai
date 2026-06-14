@@ -1,0 +1,30 @@
+{
+  "name": "placemate-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PlaceMate AI / SkillProof AI Stage 1 monorepo",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @placemate/web",
+    "dev:web": "npm run dev --workspace @placemate/web",
+    "dev:api": "npm run start:dev --workspace @placemate/api",
+    "dev:ai": "cd apps/ai-service && uvicorn main:app --reload --host 0.0.0.0 --port 8001",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:migrate": "npm run prisma:migrate --workspace @placemate/api",
+    "db:generate": "npm run prisma:generate --workspace @placemate/api",
+    "db:seed": "npm run prisma:seed --workspace @placemate/api"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "devDependencies": {
+    "@types/express-serve-static-core": "^5.0.6",
+    "@types/node": "^22.10.2",
+    "@types/passport-strategy": "^0.2.38"
+  }
+}
