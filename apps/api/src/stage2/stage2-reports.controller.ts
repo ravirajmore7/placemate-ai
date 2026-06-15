@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from "@nestjs/common";
+import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
 import { Role } from "@prisma/client";
 import { Roles } from "../common/decorators/roles.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
@@ -12,23 +12,23 @@ export class Stage2ReportsController {
   constructor(private readonly stage2: Stage2Service) {}
 
   @Get("skill-gap")
-  skillGap() {
-    return this.stage2.tpoSkillGapReport();
+  skillGap(@Query() query: Record<string, string | undefined>) {
+    return this.stage2.tpoSkillGapReport(query);
   }
 
   @Get("top-students")
-  topStudents() {
-    return this.stage2.tpoTopStudents();
+  topStudents(@Query() query: Record<string, string | undefined>) {
+    return this.stage2.tpoTopStudents(query);
   }
 
   @Get("company-fit/:driveId")
-  companyFit(@Param("driveId") driveId: string) {
-    return this.stage2.tpoCompanyFitReport(driveId);
+  companyFit(@Param("driveId") driveId: string, @Query() query: Record<string, string | undefined>) {
+    return this.stage2.tpoCompanyFitReport(driveId, query);
   }
 
   @Get("weak-skills")
-  weakSkills() {
-    return this.stage2.tpoWeakSkillsReport();
+  weakSkills(@Query() query: Record<string, string | undefined>) {
+    return this.stage2.tpoWeakSkillsReport(query);
   }
 
   @Get("platform-readiness")

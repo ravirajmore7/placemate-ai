@@ -4,6 +4,8 @@ Stage 1 + Stage 2 SaaS foundation for a smart placement intelligence platform. T
 
 Stage 2 converts GitHub, LeetCode, HackerRank, resume, project, and job-description signals into verified skill intelligence, company-wise fit scores, skill gap analysis, and personalized improvement roadmaps.
 
+Stage 2.5 optimizes local startup, dashboard rendering, API response size, report loading, and expensive AI workflows without changing the Stage 1 or Stage 2 product surface.
+
 ## Features
 
 - JWT auth with role-based access for `STUDENT`, `TPO_ADMIN`, and `SUPER_ADMIN`
@@ -22,6 +24,7 @@ Stage 2 converts GitHub, LeetCode, HackerRank, resume, project, and job-descript
 - Fake skill detection via proof levels across resume, GitHub, projects, and coding profiles
 - Student improvement roadmaps with task completion
 - TPO Stage 2 reports for top students, weak skills, company fit, and skill gaps
+- Stage 2.5 lazy-loaded charts/tables, route skeletons, cached reports, paginated heavy lists, async resume-analysis jobs, and fast mock-API local mode
 
 ## Tech Stack
 
@@ -59,7 +62,11 @@ Important variables:
 - `JWT_SECRET`: long random secret for signing JWTs
 - `JWT_EXPIRES_IN`: token lifetime, defaults to `7d`
 - `NEXT_PUBLIC_API_URL`: frontend API URL
+- `NEXT_PUBLIC_USE_MOCK_API`: set to `true` for frontend-only fast local development
 - `AI_SERVICE_URL`: backend URL for the FastAPI SkillProof AI service
+- `FAST_LOCAL_MODE`: local flag for skipping optional heavy services
+- `DISABLE_AI_SERVICE`: local flag for running API without FastAPI AI calls
+- `REPORT_CACHE_TTL_MS`: intended report cache TTL, default `300000`
 - `GITHUB_TOKEN`: optional GitHub API token to raise public API rate limits
 - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`: reserved for future GitHub OAuth
 - `REDIS_URL`: reserved for future BullMQ sync jobs
@@ -87,6 +94,35 @@ Open:
 - API: `http://localhost:4000`
 - AI service if run separately: `http://localhost:8001`
 
+## Fast Local Development Mode
+
+Use this when you only need the Next.js UI quickly:
+
+```bash
+npm run dev:fast
+```
+
+This starts the web app with `NEXT_PUBLIC_USE_MOCK_API=true`, skips API/AI startup, and serves seeded mock dashboard, SkillProof, report, and job-status data from the frontend.
+
+Use split commands when you need real services:
+
+```bash
+npm run dev:db       # postgres only
+npm run dev:api      # NestJS API
+npm run dev:web      # Next.js web
+npm run dev:ai       # FastAPI AI service
+npm run dev:all      # API + web, add RUN_AI_SERVICE=true to include AI
+```
+
+Stage 2.5 performance defaults:
+
+- TanStack Query has `staleTime`, `gcTime`, and `refetchOnWindowFocus=false` defaults to reduce duplicate localhost calls.
+- Recharts and TanStack Table are lazy-loaded behind skeletons.
+- Student drive company-fit checks only run for the first visible batch instead of every drive at page open.
+- Resume AI returns a queued job quickly and the UI polls `GET /jobs/:jobId`.
+- TPO reports and recommended students support pagination and short-lived backend caching.
+- Dashboard/list APIs avoid sending raw external API JSON or full extracted resume text unless needed.
+
 ## Docker Setup
 
 ```bash
@@ -101,6 +137,15 @@ docker compose exec api npm run prisma:seed
 ```
 
 Then open `http://localhost:3000`.
+
+Stage 2.5 split Docker modes:
+
+```bash
+docker compose -f docker-compose.dev.yml up --build
+docker compose -f docker-compose.full.yml up --build
+```
+
+`docker-compose.dev.yml` starts core local services: web, API, PostgreSQL, and Redis, with AI disabled. `docker-compose.full.yml` adds the FastAPI AI service and Qdrant for full-stack experimentation.
 
 ## Database Commands
 
@@ -202,6 +247,7 @@ Stage 2 integrations:
 Stage 2 AI and SkillProof:
 
 - `POST /ai/resume/analyze`
+- `GET /jobs/:jobId`
 - `GET /ai/resume/latest`
 - `GET /ai/resume/score`
 - `POST /ai/extract-skills`
@@ -223,6 +269,7 @@ Stage 2 AI and SkillProof:
 FastAPI SkillProof AI service:
 
 - `GET /`
+- `GET /healthz`
 - `POST /analyze-resume`
 - `POST /extract-skills`
 - `POST /analyze-job-description`
@@ -265,6 +312,29 @@ Existing Stage 1 models are preserved.
 2. Review dashboard Stage 2 cards: average SkillProof, strong GitHub, strong LeetCode, weak resume, weak DSA.
 3. Open `Top Students`, `Skill Gaps`, `Drive Recommendations`, or `Weak Skills`.
 4. Select a drive in company-fit reports to view recommended students by match score.
+
+## Stage 2.5 Performance Testing
+
+Before/after checks:
+
+```bash
+npm run dev:fast
+npm run typecheck
+npm run build
+```
+
+For real-service checks:
+
+```bash
+npm run dev:db
+npm run db:generate
+npm run db:migrate
+npm run db:seed
+npm run dev:api
+npm run dev:web
+```
+
+Open `/student`, `/student/drives`, `/student/resume-analysis`, `/student/skillproof`, `/tpo`, and the Stage 2 TPO reports. The app shell should appear before heavy data, chart/table sections should show skeletons, resume analysis should show queued/processing progress, and backend logs should print endpoint duration with `[slow-api]` warnings for requests over one second.
 
 ## Scoring Rules
 

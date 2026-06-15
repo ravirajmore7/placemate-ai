@@ -15,7 +15,7 @@ export class AiStage2Controller {
   @Post("resume/analyze")
   @Roles(Role.STUDENT)
   analyzeResume(@CurrentUser() user: AuthUser, @Body() dto: ResumeAnalyzeDto) {
-    return this.stage2.analyzeResume(user.id, dto);
+    return this.stage2.queueResumeAnalysis(user.id, dto);
   }
 
   @Get("resume/latest")

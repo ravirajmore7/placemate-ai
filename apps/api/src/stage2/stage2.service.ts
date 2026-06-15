@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { ConfigService } from "@nestjs/config";
 import { Prisma, Role } from "@prisma/client";
 import { checkEligibility } from "../drives/eligibility";
+import { JobsService } from "../jobs/jobs.service";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   buildRoadmap,
@@ -36,6 +37,10 @@ type AuthLikeUser = {
   role: string;
 };
 
+type ListQuery = Record<string, string | undefined>;
+
+const REPORT_CACHE_TTL_MS = 1000 * 60 * 5;
+
 type LeetCodeStats = {
   profileUrl: string;
   totalSolved: number;
@@ -61,9 +66,12 @@ type HackerRankStats = {
 
 @Injectable()
 export class Stage2Service {
+  private readonly cache = new Map<string, { expiresAt: number; value: unknown }>();
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly jobs: JobsService
   ) {}
 
   async syncGitHub(userId: string, dto: UsernameSyncDto) {
@@ -167,7 +175,45 @@ export class Stage2Service {
     const profile = await this.ensureStudentProfile(userId);
     return this.prisma.gitHubProfile.findUnique({
       where: { studentProfileId: profile.id },
-      include: { repositories: { orderBy: [{ qualityScore: "desc" }, { lastUpdatedAt: "desc" }] } }
+      select: {
+        id: true,
+        studentProfileId: true,
+        username: true,
+        name: true,
+        bio: true,
+        avatarUrl: true,
+        profileUrl: true,
+        publicRepos: true,
+        followers: true,
+        following: true,
+        githubScore: true,
+        strengthsJson: true,
+        weaknessesJson: true,
+        suggestionsJson: true,
+        lastSyncedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        repositories: {
+          orderBy: [{ qualityScore: "desc" }, { lastUpdatedAt: "desc" }],
+          take: 12,
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            url: true,
+            primaryLanguage: true,
+            languagesJson: true,
+            stars: true,
+            forks: true,
+            openIssues: true,
+            hasReadme: true,
+            hasLiveDemo: true,
+            topicsJson: true,
+            lastUpdatedAt: true,
+            qualityScore: true
+          }
+        }
+      }
     });
   }
 
@@ -217,7 +263,31 @@ export class Stage2Service {
 
   async getLeetCodeMe(userId: string) {
     const profile = await this.ensureStudentProfile(userId);
-    return this.prisma.leetCodeProfile.findUnique({ where: { studentProfileId: profile.id } });
+    return this.prisma.leetCodeProfile.findUnique({
+      where: { studentProfileId: profile.id },
+      select: {
+        id: true,
+        studentProfileId: true,
+        username: true,
+        profileUrl: true,
+        totalSolved: true,
+        easySolved: true,
+        mediumSolved: true,
+        hardSolved: true,
+        ranking: true,
+        contestRating: true,
+        acceptanceRate: true,
+        badgesJson: true,
+        topicStatsJson: true,
+        leetcodeScore: true,
+        strengthsJson: true,
+        weaknessesJson: true,
+        suggestionsJson: true,
+        lastSyncedAt: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
   }
 
   async getLeetCodeScore(userId: string) {
@@ -292,7 +362,28 @@ export class Stage2Service {
 
   async getHackerRankMe(userId: string) {
     const profile = await this.ensureStudentProfile(userId);
-    return this.prisma.hackerRankProfile.findUnique({ where: { studentProfileId: profile.id } });
+    return this.prisma.hackerRankProfile.findUnique({
+      where: { studentProfileId: profile.id },
+      select: {
+        id: true,
+        studentProfileId: true,
+        username: true,
+        profileUrl: true,
+        problemSolvingScore: true,
+        pythonScore: true,
+        javaScore: true,
+        sqlScore: true,
+        certificationsJson: true,
+        testScoresJson: true,
+        hackerRankScore: true,
+        strengthsJson: true,
+        weaknessesJson: true,
+        suggestionsJson: true,
+        lastSyncedAt: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
   }
 
   async getHackerRankScore(userId: string) {
@@ -305,6 +396,16 @@ export class Stage2Service {
       weaknesses: hackerRank?.weaknessesJson ?? [],
       suggestions: hackerRank?.suggestionsJson ?? []
     };
+  }
+
+  async queueResumeAnalysis(userId: string, dto: ResumeAnalyzeDto) {
+    return this.jobs.enqueue("resume-analysis", async (setProgress) => {
+      setProgress(15);
+      const saved = await this.analyzeResume(userId, dto);
+      setProgress(85);
+      const { extractedText: _extractedText, ...summary } = saved;
+      return summary;
+    });
   }
 
   async analyzeResume(userId: string, dto: ResumeAnalyzeDto) {
@@ -369,7 +470,29 @@ export class Stage2Service {
     const profile = await this.ensureStudentProfile(userId);
     return this.prisma.resumeAnalysis.findFirst({
       where: { studentProfileId: profile.id },
-      orderBy: { analyzedAt: "desc" }
+      orderBy: { analyzedAt: "desc" },
+      select: {
+        id: true,
+        studentProfileId: true,
+        resumeUrl: true,
+        detectedSkillsJson: true,
+        missingSectionsJson: true,
+        weakPointsJson: true,
+        suggestionsJson: true,
+        atsScore: true,
+        resumeScore: true,
+        contactScore: true,
+        educationScore: true,
+        skillsScore: true,
+        projectsScore: true,
+        experienceScore: true,
+        formattingScore: true,
+        impactScore: true,
+        linksScore: true,
+        analyzedAt: true,
+        createdAt: true,
+        updatedAt: true
+      }
     });
   }
 
@@ -477,6 +600,15 @@ export class Stage2Service {
     return this.calculateMatch(profile.id, driveId);
   }
 
+  async getDriveMatchForUser(userId: string, driveId: string) {
+    const profile = await this.ensureStudentProfile(userId);
+    const existing = await this.prisma.jobMatchResult.findUnique({
+      where: { studentProfileId_driveId: { studentProfileId: profile.id, driveId } },
+      include: { drive: { include: { company: true } } }
+    });
+    return existing ?? this.calculateMatch(profile.id, driveId);
+  }
+
   async getStudentMatches(studentProfileId: string) {
     return this.prisma.jobMatchResult.findMany({
       where: { studentProfileId },
@@ -485,28 +617,41 @@ export class Stage2Service {
     });
   }
 
-  async recommendedStudents(driveId: string) {
-    const drive = await this.prisma.drive.findUnique({ where: { id: driveId }, include: { company: true } });
-    if (!drive) throw new NotFoundException("Company drive not found");
+  async recommendedStudents(driveId: string, query: ListQuery = {}) {
+    const page = Math.max(Number(query.page ?? 1), 1);
+    const limit = Math.min(Math.max(Number(query.limit ?? 20), 1), 50);
+    const skip = (page - 1) * limit;
 
-    const students = await this.prisma.studentProfile.findMany({
-      include: { user: true, skills: true },
-      orderBy: { readinessScore: "desc" },
-      take: 50
+    return this.cached(`recommended-students:${driveId}:${page}:${limit}`, REPORT_CACHE_TTL_MS, async () => {
+      const drive = await this.prisma.drive.findUnique({ where: { id: driveId }, include: { company: true } });
+      if (!drive) throw new NotFoundException("Company drive not found");
+
+      const [students, total] = await Promise.all([
+        this.prisma.studentProfile.findMany({
+          skip,
+          take: limit,
+          include: { user: { select: { id: true, name: true, email: true } }, skills: true },
+          orderBy: { readinessScore: "desc" }
+        }),
+        this.prisma.studentProfile.count()
+      ]);
+
+      const results = await Promise.all(students.map((student) => this.calculateMatch(student.id, driveId)));
+      const byStudent = new Map(results.map((result) => [result.studentProfileId, result]));
+      return {
+        drive,
+        students: students
+          .map((student) => ({
+            ...student,
+            match: byStudent.get(student.id),
+            eligibility: checkEligibility(student, drive)
+          }))
+          .sort((a, b) => (b.match?.matchScore ?? 0) - (a.match?.matchScore ?? 0)),
+        total,
+        page,
+        limit
+      };
     });
-
-    const results = await Promise.all(students.map((student) => this.calculateMatch(student.id, driveId)));
-    const byStudent = new Map(results.map((result) => [result.studentProfileId, result]));
-    return {
-      drive,
-      students: students
-        .map((student) => ({
-          ...student,
-          match: byStudent.get(student.id),
-          eligibility: checkEligibility(student, drive)
-        }))
-        .sort((a, b) => (b.match?.matchScore ?? 0) - (a.match?.matchScore ?? 0))
-    };
   }
 
   async generateRoadmap(userId: string, dto: RoadmapGenerateDto) {
@@ -574,117 +719,171 @@ export class Stage2Service {
     return this.prisma.roadmapTask.update({ where: { id: taskId }, data: { completed } });
   }
 
-  async tpoTopStudents() {
-    const students = await this.prisma.studentProfile.findMany({
-      include: {
-        user: true,
-        githubProfile: true,
-        leetcodeProfile: true,
-        hackerRankProfile: true,
-        skills: true,
-        resumeAnalyses: { orderBy: { analyzedAt: "desc" }, take: 1 },
-        skillProofScores: { orderBy: { calculatedAt: "desc" }, take: 1 }
-      },
-      take: 50
+  async tpoTopStudents(query: ListQuery = {}) {
+    const page = Math.max(Number(query.page ?? 1), 1);
+    const limit = Math.min(Math.max(Number(query.limit ?? 25), 1), 50);
+    const skip = (page - 1) * limit;
+
+    return this.cached(`tpo-top-students:${page}:${limit}`, REPORT_CACHE_TTL_MS, async () => {
+      const [students, total] = await Promise.all([
+        this.prisma.studentProfile.findMany({
+          skip,
+          take: limit,
+          orderBy: { readinessScore: "desc" },
+          select: {
+            id: true,
+            branch: true,
+            cgpa: true,
+            readinessScore: true,
+            user: { select: { name: true, email: true } },
+            githubProfile: { select: { githubScore: true } },
+            leetcodeProfile: { select: { leetcodeScore: true } },
+            skills: { select: { name: true } },
+            resumeAnalyses: { orderBy: { analyzedAt: "desc" }, take: 1, select: { resumeScore: true } },
+            skillProofScores: { orderBy: { calculatedAt: "desc" }, take: 1, select: { overallScore: true } }
+          }
+        }),
+        this.prisma.studentProfile.count()
+      ]);
+
+      const items = students
+        .map((student) => ({
+          id: student.id,
+          name: student.user.name,
+          email: student.user.email,
+          branch: student.branch,
+          cgpa: student.cgpa,
+          readinessScore: student.readinessScore,
+          skillProofScore: student.skillProofScores[0]?.overallScore ?? 0,
+          githubScore: student.githubProfile?.githubScore ?? 0,
+          leetcodeScore: student.leetcodeProfile?.leetcodeScore ?? 0,
+          resumeScore: student.resumeAnalyses[0]?.resumeScore ?? 0,
+          recommendedRoles: this.recommendedRolesForStudent(student.skills?.map((skill) => skill.name) ?? [])
+        }))
+        .sort((a, b) => b.skillProofScore - a.skillProofScore || b.readinessScore - a.readinessScore);
+
+      return { items, total, page, limit };
     });
-
-    return students
-      .map((student) => ({
-        id: student.id,
-        name: student.user.name,
-        email: student.user.email,
-        branch: student.branch,
-        cgpa: student.cgpa,
-        readinessScore: student.readinessScore,
-        skillProofScore: student.skillProofScores[0]?.overallScore ?? 0,
-        githubScore: student.githubProfile?.githubScore ?? 0,
-        leetcodeScore: student.leetcodeProfile?.leetcodeScore ?? 0,
-        resumeScore: student.resumeAnalyses[0]?.resumeScore ?? 0,
-        recommendedRoles: this.recommendedRolesForStudent(student.skills?.map((skill) => skill.name) ?? [])
-      }))
-      .sort((a, b) => b.skillProofScore - a.skillProofScore || b.readinessScore - a.readinessScore)
-      .slice(0, 25);
   }
 
-  async tpoSkillGapReport() {
-    const [gaps, students] = await Promise.all([
-      this.prisma.skillGap.findMany({ include: { drive: { include: { company: true } }, studentProfile: { include: { user: true } } } }),
-      this.prisma.studentProfile.findMany({ include: { skills: true } })
-    ]);
+  async tpoSkillGapReport(query: ListQuery = {}) {
+    const page = Math.max(Number(query.page ?? 1), 1);
+    const limit = Math.min(Math.max(Number(query.limit ?? 25), 1), 100);
+    const skip = (page - 1) * limit;
 
-    const missing = this.countBy(gaps.map((gap) => gap.skillName));
-    const branchWise = students.reduce<Record<string, Record<string, number>>>((acc, student) => {
-      const branch = student.branch || "Not added";
-      acc[branch] ??= {};
-      for (const skill of student.skills) {
-        if (skill.level <= 2) acc[branch][skill.name] = (acc[branch][skill.name] ?? 0) + 1;
-      }
-      return acc;
-    }, {});
+    return this.cached(`tpo-skill-gap:${page}:${limit}`, REPORT_CACHE_TTL_MS, async () => {
+      const [gaps, total, weakSkills] = await Promise.all([
+        this.prisma.skillGap.findMany({
+          skip,
+          take: limit,
+          orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
+          include: {
+            drive: { select: { role: true, company: { select: { name: true } } } },
+            studentProfile: { select: { branch: true, user: { select: { name: true } } } }
+          }
+        }),
+        this.prisma.skillGap.count(),
+        this.prisma.skill.findMany({
+          where: { level: { lte: 2 } },
+          take: 500,
+          select: { name: true, studentProfile: { select: { branch: true } } }
+        })
+      ]);
 
-    return {
-      mostMissingSkills: missing,
-      branchWiseWeakAreas: Object.entries(branchWise).map(([branch, skills]) => ({ branch, skills: this.countMapToList(skills) })),
-      companyWiseGaps: gaps.map((gap) => ({
-        company: gap.drive.company.name,
-        role: gap.drive.role,
-        student: gap.studentProfile.user.name,
-        skill: gap.skillName,
-        priority: gap.priority,
-        recommendation: gap.recommendation
-      })),
-      suggestedTrainingSessions: missing.slice(0, 6).map((item) => `Run a ${item.name} workshop for ${item.count} students`)
-    };
-  }
+      const missing = this.countBy(gaps.map((gap) => gap.skillName));
+      const branchWise = weakSkills.reduce<Record<string, Record<string, number>>>((acc, skill) => {
+        const branch = skill.studentProfile.branch || "Not added";
+        acc[branch] ??= {};
+        acc[branch][skill.name] = (acc[branch][skill.name] ?? 0) + 1;
+        return acc;
+      }, {});
 
-  async tpoCompanyFitReport(driveId: string) {
-    return this.recommendedStudents(driveId);
-  }
-
-  async tpoWeakSkillsReport() {
-    const verifications = await this.prisma.skillVerification.findMany({
-      where: { proofLevel: { in: ["Weak Proof", "No Proof Found"] } },
-      include: { studentProfile: { include: { user: true } } }
+      return {
+        mostMissingSkills: missing,
+        branchWiseWeakAreas: Object.entries(branchWise).map(([branch, skills]) => ({ branch, skills: this.countMapToList(skills) })),
+        companyWiseGaps: gaps.map((gap) => ({
+          company: gap.drive.company.name,
+          role: gap.drive.role,
+          student: gap.studentProfile.user.name,
+          skill: gap.skillName,
+          priority: gap.priority,
+          recommendation: gap.recommendation
+        })),
+        suggestedTrainingSessions: missing.slice(0, 6).map((item) => `Run a ${item.name} workshop for ${item.count} students`),
+        total,
+        page,
+        limit
+      };
     });
-    return {
-      weakSkills: this.countBy(verifications.map((item) => item.skillName)),
-      students: verifications.map((item) => ({
-        student: item.studentProfile.user.name,
-        skill: item.skillName,
-        proofLevel: item.proofLevel,
-        suggestion: item.suggestion
-      }))
-    };
+  }
+
+  async tpoCompanyFitReport(driveId: string, query: ListQuery = {}) {
+    return this.recommendedStudents(driveId, query);
+  }
+
+  async tpoWeakSkillsReport(query: ListQuery = {}) {
+    const page = Math.max(Number(query.page ?? 1), 1);
+    const limit = Math.min(Math.max(Number(query.limit ?? 25), 1), 100);
+    const skip = (page - 1) * limit;
+
+    return this.cached(`tpo-weak-skills:${page}:${limit}`, REPORT_CACHE_TTL_MS, async () => {
+      const where: Prisma.SkillVerificationWhereInput = { proofLevel: { in: ["Weak Proof", "No Proof Found"] } };
+      const [verifications, total, allWeak] = await Promise.all([
+        this.prisma.skillVerification.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: [{ confidenceScore: "asc" }, { updatedAt: "desc" }],
+          include: { studentProfile: { select: { user: { select: { name: true } } } } }
+        }),
+        this.prisma.skillVerification.count({ where }),
+        this.prisma.skillVerification.findMany({ where, take: 500, select: { skillName: true } })
+      ]);
+      return {
+        weakSkills: this.countBy(allWeak.map((item) => item.skillName)),
+        students: verifications.map((item) => ({
+          student: item.studentProfile.user.name,
+          skill: item.skillName,
+          proofLevel: item.proofLevel,
+          suggestion: item.suggestion
+        })),
+        total,
+        page,
+        limit
+      };
+    });
   }
 
   async tpoPlatformReadiness() {
-    const [students, skillProofAggregate] = await Promise.all([
-      this.prisma.studentProfile.findMany({
-        include: {
-          githubProfile: true,
-          leetcodeProfile: true,
-          hackerRankProfile: true,
-          resumeAnalyses: { orderBy: { analyzedAt: "desc" }, take: 1 },
-          skillProofScores: { orderBy: { calculatedAt: "desc" }, take: 1 }
-        }
-      }),
-      this.prisma.skillProofScore.aggregate({ _avg: { overallScore: true } })
-    ]);
+    return this.cached("tpo-platform-readiness", REPORT_CACHE_TTL_MS, async () => {
+      const [students, skillProofAggregate] = await Promise.all([
+        this.prisma.studentProfile.findMany({
+          take: 1000,
+          select: {
+            githubProfile: { select: { githubScore: true } },
+            leetcodeProfile: { select: { leetcodeScore: true } },
+            hackerRankProfile: { select: { hackerRankScore: true } },
+            resumeAnalyses: { orderBy: { analyzedAt: "desc" }, take: 1, select: { resumeScore: true } }
+          }
+        }),
+        this.prisma.skillProofScore.aggregate({ _avg: { overallScore: true } })
+      ]);
 
-    const average = (values: number[]) => clampScore(values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1));
-    return {
-      averageSkillProofScore: clampScore(skillProofAggregate._avg.overallScore ?? 0),
-      averageGithubScore: average(students.map((student) => student.githubProfile?.githubScore ?? 0)),
-      averageLeetCodeScore: average(students.map((student) => student.leetcodeProfile?.leetcodeScore ?? 0)),
-      averageHackerRankScore: average(students.map((student) => student.hackerRankProfile?.hackerRankScore ?? 0)),
-      averageResumeScore: average(students.map((student) => student.resumeAnalyses[0]?.resumeScore ?? 0)),
-      connectedProfiles: {
-        github: students.filter((student) => student.githubProfile).length,
-        leetcode: students.filter((student) => student.leetcodeProfile).length,
-        hackerrank: students.filter((student) => student.hackerRankProfile).length,
-        resumeAnalyzed: students.filter((student) => student.resumeAnalyses.length).length
-      }
-    };
+      const average = (values: number[]) => clampScore(values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1));
+      return {
+        averageSkillProofScore: clampScore(skillProofAggregate._avg.overallScore ?? 0),
+        averageGithubScore: average(students.map((student) => student.githubProfile?.githubScore ?? 0)),
+        averageLeetCodeScore: average(students.map((student) => student.leetcodeProfile?.leetcodeScore ?? 0)),
+        averageHackerRankScore: average(students.map((student) => student.hackerRankProfile?.hackerRankScore ?? 0)),
+        averageResumeScore: average(students.map((student) => student.resumeAnalyses[0]?.resumeScore ?? 0)),
+        connectedProfiles: {
+          github: students.filter((student) => student.githubProfile).length,
+          leetcode: students.filter((student) => student.leetcodeProfile).length,
+          hackerrank: students.filter((student) => student.hackerRankProfile).length,
+          resumeAnalyzed: students.filter((student) => student.resumeAnalyses.length).length
+        }
+      };
+    });
   }
 
   async calculateSkillProofForProfile(studentProfileId: string) {
@@ -730,6 +929,17 @@ export class Stage2Service {
         suggestionsJson: json(result.suggestions)
       }
     });
+  }
+
+  private async cached<T>(key: string, ttlMs: number, producer: () => Promise<T>): Promise<T> {
+    const hit = this.cache.get(key);
+    const now = Date.now();
+    if (hit && hit.expiresAt > now) {
+      return hit.value as T;
+    }
+    const value = await producer();
+    this.cache.set(key, { value, expiresAt: now + ttlMs });
+    return value;
   }
 
   private async calculateMatch(studentProfileId: string, driveId: string) {

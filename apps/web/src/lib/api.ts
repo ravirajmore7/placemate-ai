@@ -1,6 +1,7 @@
 "use client";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const USE_MOCK_API = process.env.NEXT_PUBLIC_USE_MOCK_API === "true";
 
 type ApiOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
@@ -8,6 +9,11 @@ type ApiOptions = Omit<RequestInit, "body"> & {
 };
 
 export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
+  if (USE_MOCK_API) {
+    const { mockApiFetch } = await import("@/lib/mock-api");
+    return mockApiFetch<T>(path, options);
+  }
+
   const token = options.token ?? (typeof window !== "undefined" ? window.localStorage.getItem("placemate_token") : null);
   const headers = new Headers(options.headers);
 

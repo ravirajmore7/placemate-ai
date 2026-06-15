@@ -1,0 +1,87 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: placemate-full-postgres
+    environment:
+      POSTGRES_DB: placemate_ai
+      POSTGRES_USER: placemate
+      POSTGRES_PASSWORD: placemate
+    ports:
+      - "5432:5432"
+    volumes:
+      - placemate_full_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U placemate -d placemate_ai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: placemate-full-redis
+    ports:
+      - "6379:6379"
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.5
+    container_name: placemate-full-qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - placemate_qdrant_data:/qdrant/storage
+
+  ai-service:
+    build:
+      context: .
+      dockerfile: apps/ai-service/Dockerfile
+    container_name: placemate-full-ai-service
+    ports:
+      - "8001:8001"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: placemate-full-api
+    environment:
+      DATABASE_URL: postgresql://placemate:placemate@postgres:5432/placemate_ai?schema=public
+      JWT_SECRET: replace-with-a-long-random-secret
+      JWT_EXPIRES_IN: 7d
+      API_PORT: 4000
+      WEB_ORIGIN: http://localhost:3000
+      AI_SERVICE_URL: http://ai-service:8001
+      REDIS_URL: redis://redis:6379
+      QDRANT_URL: http://qdrant:6333
+    command: sh -c "npx prisma migrate deploy && node dist/src/main.js"
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      ai-service:
+        condition: service_started
+      qdrant:
+        condition: service_started
+    volumes:
+      - api_full_uploads:/app/apps/api/uploads
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: placemate-full-web
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      NEXT_PUBLIC_APP_NAME: PlaceMate AI
+      NEXT_PUBLIC_USE_MOCK_API: "false"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  placemate_full_postgres_data:
+  placemate_qdrant_data:
+  api_full_uploads:

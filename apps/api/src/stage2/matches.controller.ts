@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { Role } from "@prisma/client";
 import { AuthUser, CurrentUser } from "../common/decorators/current-user.decorator";
 import { Roles } from "../common/decorators/roles.decorator";
@@ -20,7 +20,7 @@ export class MatchesController {
   @Get("drive/:driveId/me")
   @Roles(Role.STUDENT)
   myDriveMatch(@CurrentUser() user: AuthUser, @Param("driveId") driveId: string) {
-    return this.stage2.matchDriveForUser(user.id, driveId);
+    return this.stage2.getDriveMatchForUser(user.id, driveId);
   }
 
   @Get("student/:studentId")
@@ -31,7 +31,7 @@ export class MatchesController {
 
   @Get("drive/:driveId/recommended-students")
   @Roles(Role.TPO_ADMIN, Role.SUPER_ADMIN)
-  recommendedStudents(@Param("driveId") driveId: string) {
-    return this.stage2.recommendedStudents(driveId);
+  recommendedStudents(@Param("driveId") driveId: string, @Query() query: Record<string, string | undefined>) {
+    return this.stage2.recommendedStudents(driveId, query);
   }
 }

@@ -121,6 +121,8 @@ model StudentProfile {
 
   @@index([branch])
   @@index([cgpa])
+  @@index([activeBacklogs])
+  @@index([placementStatus])
   @@index([readinessScore])
 }
 
@@ -206,6 +208,9 @@ model Drive {
 
   @@index([status])
   @@index([applicationDeadline])
+  @@index([minimumCgpa])
+  @@index([createdById])
+  @@index([companyId])
 }
 
 model Application {
@@ -222,7 +227,10 @@ model Application {
   drive          Drive          @relation(fields: [driveId], references: [id], onDelete: Cascade)
 
   @@unique([studentProfileId, driveId])
+  @@index([studentProfileId])
+  @@index([driveId])
   @@index([status])
+  @@index([appliedAt])
 }
 
 model ReadinessScoreHistory {
@@ -497,6 +505,7 @@ model JobMatchResult {
   drive          Drive          @relation(fields: [driveId], references: [id], onDelete: Cascade)
 
   @@unique([studentProfileId, driveId])
+  @@index([studentProfileId])
   @@index([driveId])
   @@index([matchScore])
 }

@@ -114,6 +114,17 @@ export type Paginated<T> = {
   limit: number;
 };
 
+export type JobStatus = {
+  id: string;
+  type: string;
+  status: "queued" | "processing" | "completed" | "failed";
+  progress: number;
+  resultJson?: unknown;
+  errorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type GitHubRepository = {
   id: string;
   name: string;

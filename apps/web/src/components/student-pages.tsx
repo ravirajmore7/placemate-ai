@@ -698,40 +698,42 @@ export function StudentDrivesPage() {
     queryFn: () => apiFetch<Paginated<Drive>>("/drives?limit=30")
   });
   const drives = drivesQuery.data?.items ?? [];
-  const eligibilityQueries = useQueries({
-    queries: drives.map((drive) => ({
-      queryKey: ["drive-eligibility", drive.id],
-      queryFn: () => apiFetch<Eligibility>(`/drives/${drive.id}/eligibility`)
-    }))
-  });
-  const eligibilityByDrive = drives.reduce<Record<string, Eligibility | undefined>>((acc, drive, index) => {
-    acc[drive.id] = eligibilityQueries[index]?.data;
-    return acc;
-  }, {});
-  const matchQueries = useQueries({
-    queries: drives.map((drive) => ({
-      queryKey: ["drive-match", drive.id],
-      queryFn: () => apiFetch<JobMatchResult>(`/matches/drive/${drive.id}/me`)
-    }))
-  });
-  const matchByDrive = drives.reduce<Record<string, JobMatchResult | undefined>>((acc, drive, index) => {
-    acc[drive.id] = matchQueries[index]?.data;
-    return acc;
-  }, {});
-  const filteredDrives = drives
+  const baseFilteredDrives = drives
     .filter((drive) => {
       const query = search.trim().toLowerCase();
       const matchesSearch = !query || [drive.company.name, drive.role, drive.location].some((value) => value.toLowerCase().includes(query));
       const matchesJobType = jobType === "all" || drive.jobType === jobType;
       const matchesStatus = status === "all" || drive.status === status;
-      const matchesEligibility = eligibility === "all" || eligibilityByDrive[drive.id]?.status === eligibility;
-      return matchesSearch && matchesJobType && matchesStatus && matchesEligibility;
+      return matchesSearch && matchesJobType && matchesStatus;
     })
     .sort((a, b) => {
       if (sortBy === "deadline-desc") return new Date(b.applicationDeadline).getTime() - new Date(a.applicationDeadline).getTime();
       if (sortBy === "ctc-desc") return (b.ctc ?? 0) - (a.ctc ?? 0);
       return new Date(a.applicationDeadline).getTime() - new Date(b.applicationDeadline).getTime();
     });
+  const backgroundDrives = baseFilteredDrives.slice(0, 12);
+  const eligibilityQueries = useQueries({
+    queries: backgroundDrives.map((drive) => ({
+      queryKey: ["drive-eligibility", drive.id],
+      queryFn: () => apiFetch<Eligibility>(`/drives/${drive.id}/eligibility`)
+    }))
+  });
+  const eligibilityByDrive = backgroundDrives.reduce<Record<string, Eligibility | undefined>>((acc, drive, index) => {
+    acc[drive.id] = eligibilityQueries[index]?.data;
+    return acc;
+  }, {});
+  const matchQueries = useQueries({
+    queries: backgroundDrives.map((drive) => ({
+      queryKey: ["drive-match", drive.id],
+      queryFn: () => apiFetch<JobMatchResult>(`/matches/drive/${drive.id}/me`)
+    }))
+  });
+  const matchByDrive = backgroundDrives.reduce<Record<string, JobMatchResult | undefined>>((acc, drive, index) => {
+    acc[drive.id] = matchQueries[index]?.data;
+    return acc;
+  }, {});
+  const filteredDrives = baseFilteredDrives.filter((drive) => eligibility === "all" || eligibilityByDrive[drive.id]?.status === eligibility);
+  const visibleDrives = filteredDrives.slice(0, 12);
 
   if (drivesQuery.isLoading) return <LoadingSkeleton rows={5} />;
 
@@ -789,9 +791,14 @@ export function StudentDrivesPage() {
           </Select>
         </CardContent>
       </Card>
-      {filteredDrives.length ? (
+      {filteredDrives.length > visibleDrives.length ? (
+        <p className="text-sm text-muted-foreground">
+          Showing the first {visibleDrives.length} matching drives. Use filters to narrow a larger result set.
+        </p>
+      ) : null}
+      {visibleDrives.length ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          {filteredDrives.map((drive) => <DriveCard key={drive.id} drive={drive} eligibility={eligibilityByDrive[drive.id]} match={matchByDrive[drive.id]} />)}
+          {visibleDrives.map((drive) => <DriveCard key={drive.id} drive={drive} eligibility={eligibilityByDrive[drive.id]} match={matchByDrive[drive.id]} />)}
         </div>
       ) : (
         <EmptyState

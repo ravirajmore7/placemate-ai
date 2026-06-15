@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 try:
@@ -15,6 +18,8 @@ except Exception:  # pragma: no cover - optional local dependency
 
 
 app = FastAPI(title="PlaceMate AI SkillProof Service", version="0.2.0")
+CACHE: Dict[str, Any] = {}
+CACHE_MAX_ITEMS = 256
 
 TECH_SKILLS = [
     "Java",
@@ -61,6 +66,28 @@ TECH_SKILLS = [
 
 SOFT_SKILLS = ["communication", "leadership", "teamwork", "collaboration", "presentation", "ownership"]
 ACTION_VERBS = ["built", "created", "designed", "implemented", "optimized", "improved", "deployed", "automated"]
+
+
+def payload_to_dict(payload: BaseModel) -> Dict[str, Any]:
+    if hasattr(payload, "model_dump"):
+        return payload.model_dump(by_alias=True)
+    return payload.dict(by_alias=True)
+
+
+def cache_key(namespace: str, payload: Dict[str, Any]) -> str:
+    stable = json.dumps(payload, sort_keys=True, default=str)
+    return f"{namespace}:{hashlib.sha256(stable.encode('utf-8')).hexdigest()}"
+
+
+def cached(namespace: str, payload: Dict[str, Any], producer: Callable[[], Dict[str, Any]]) -> Dict[str, Any]:
+    key = cache_key(namespace, payload)
+    if key in CACHE:
+        return CACHE[key]
+    result = producer()
+    if len(CACHE) >= CACHE_MAX_ITEMS:
+        CACHE.pop(next(iter(CACHE)))
+    CACHE[key] = result
+    return result
 
 
 class ResumePayload(BaseModel):
@@ -286,6 +313,22 @@ def analyze_jd(text: str) -> Dict[str, Any]:
     }
 
 
+@app.exception_handler(HTTPException)
+async def http_error_handler(_request: Request, exc: HTTPException) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"message": exc.detail, "statusCode": exc.status_code}},
+    )
+
+
+@app.exception_handler(Exception)
+async def generic_error_handler(_request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content={"error": {"message": str(exc) or "AI service error", "statusCode": 500}},
+    )
+
+
 @app.get("/")
 def health() -> Dict[str, Any]:
     return {
@@ -297,138 +340,162 @@ def health() -> Dict[str, Any]:
     }
 
 
+@app.get("/healthz")
+def healthz() -> Dict[str, str]:
+    return {"status": "ok"}
+
+
 @app.post("/analyze-resume")
 def analyze_resume(payload: ResumePayload) -> Dict[str, Any]:
-    text = payload.resume_text or extract_pdf_text(payload.file_path or "")
-    return analyze_resume_text(text, payload.student_profile_data)
+    return cached(
+        "analyze-resume",
+        payload_to_dict(payload),
+        lambda: analyze_resume_text(payload.resume_text or extract_pdf_text(payload.file_path or ""), payload.student_profile_data),
+    )
 
 
 @app.post("/extract-skills")
 def extract_skills_endpoint(payload: TextPayload) -> Dict[str, Any]:
-    text = payload.text or payload.job_description or ""
-    return {
-        "skills": extract_skills(text),
-        "technologies": [skill for skill in extract_skills(text) if skill not in {"Communication", "Problem Solving", "Aptitude"}],
-        "softSkills": extract_soft_skills(text),
-        "roleCategory": analyze_jd(text)["roleCategory"] if text.strip() else "Unknown",
-    }
+    def produce() -> Dict[str, Any]:
+        text = payload.text or payload.job_description or ""
+        skills = extract_skills(text)
+        return {
+            "skills": skills,
+            "technologies": [skill for skill in skills if skill not in {"Communication", "Problem Solving", "Aptitude"}],
+            "softSkills": extract_soft_skills(text),
+            "roleCategory": analyze_jd(text)["roleCategory"] if text.strip() else "Unknown",
+        }
+
+    return cached("extract-skills", payload_to_dict(payload), produce)
 
 
 @app.post("/analyze-job-description")
 def analyze_job_description(payload: TextPayload) -> Dict[str, Any]:
-    return analyze_jd(payload.job_description or payload.text)
+    return cached("analyze-job-description", payload_to_dict(payload), lambda: analyze_jd(payload.job_description or payload.text))
 
 
 @app.post("/match-resume-with-jd")
 def match_resume_with_jd(payload: MatchPayload) -> Dict[str, Any]:
-    resume = analyze_resume_text(payload.resume_text, payload.student_profile_data)
-    jd = analyze_jd(payload.job_description)
-    resume_skills = set(skill.lower() for skill in resume["detectedSkills"])
-    required = jd["requiredSkills"]
-    matched = [skill for skill in required if skill.lower() in resume_skills]
-    missing = [skill for skill in required if skill.lower() not in resume_skills]
-    match_score = clamp(
-        (len(matched) / max(len(required), 1)) * 35
-        + resume["resumeScore"] * 0.2
-        + resume["atsScore"] * 0.15
-        + (100 - len(missing) * 8) * 0.15
-        + 15
-    )
-    return {
-        "matchScore": match_score,
-        "matchedSkills": matched,
-        "missingSkills": missing,
-        "weakSkills": missing[:3],
-        "reasons": [f"{len(matched)}/{max(len(required), 1)} required skills matched", f"Resume score is {resume['resumeScore']}/100"],
-        "suggestions": [f"Add proof for {skill}" for skill in missing[:5]] or ["Maintain current proof quality and prepare for interviews"],
-    }
+    def produce() -> Dict[str, Any]:
+        resume = analyze_resume_text(payload.resume_text, payload.student_profile_data)
+        jd = analyze_jd(payload.job_description)
+        resume_skills = set(skill.lower() for skill in resume["detectedSkills"])
+        required = jd["requiredSkills"]
+        matched = [skill for skill in required if skill.lower() in resume_skills]
+        missing = [skill for skill in required if skill.lower() not in resume_skills]
+        match_score = clamp(
+            (len(matched) / max(len(required), 1)) * 35
+            + resume["resumeScore"] * 0.2
+            + resume["atsScore"] * 0.15
+            + (100 - len(missing) * 8) * 0.15
+            + 15
+        )
+        return {
+            "matchScore": match_score,
+            "matchedSkills": matched,
+            "missingSkills": missing,
+            "weakSkills": missing[:3],
+            "reasons": [f"{len(matched)}/{max(len(required), 1)} required skills matched", f"Resume score is {resume['resumeScore']}/100"],
+            "suggestions": [f"Add proof for {skill}" for skill in missing[:5]] or ["Maintain current proof quality and prepare for interviews"],
+        }
+
+    return cached("match-resume-with-jd", payload_to_dict(payload), produce)
 
 
 @app.post("/calculate-skillproof-score")
 def calculate_skillproof_score(payload: SkillProofPayload) -> Dict[str, Any]:
-    breakdown = {
-        "placementReadinessScore": payload.placement_readiness_score,
-        "resumeScore": payload.resume_score,
-        "githubScore": payload.github_score,
-        "leetcodeScore": payload.leetcode_score,
-        "hackerRankScore": payload.hacker_rank_score,
-        "projectScore": payload.project_score,
-        "skillVerificationScore": payload.skill_verification_score,
-    }
-    overall = clamp(
-        payload.placement_readiness_score * 0.2
-        + payload.resume_score * 0.2
-        + payload.github_score * 0.15
-        + payload.leetcode_score * 0.15
-        + payload.hacker_rank_score * 0.1
-        + payload.project_score * 0.1
-        + payload.skill_verification_score * 0.1
-    )
-    return {
-        "overallScore": overall,
-        "level": level(overall),
-        "breakdown": breakdown,
-        "suggestions": [
-            "Improve the lowest scoring platform first",
-            "Add public proof for claimed skills",
-            "Keep resume, projects, and GitHub technologies consistent",
-        ],
-    }
+    def produce() -> Dict[str, Any]:
+        breakdown = {
+            "placementReadinessScore": payload.placement_readiness_score,
+            "resumeScore": payload.resume_score,
+            "githubScore": payload.github_score,
+            "leetcodeScore": payload.leetcode_score,
+            "hackerRankScore": payload.hacker_rank_score,
+            "projectScore": payload.project_score,
+            "skillVerificationScore": payload.skill_verification_score,
+        }
+        overall = clamp(
+            payload.placement_readiness_score * 0.2
+            + payload.resume_score * 0.2
+            + payload.github_score * 0.15
+            + payload.leetcode_score * 0.15
+            + payload.hacker_rank_score * 0.1
+            + payload.project_score * 0.1
+            + payload.skill_verification_score * 0.1
+        )
+        return {
+            "overallScore": overall,
+            "level": level(overall),
+            "breakdown": breakdown,
+            "suggestions": [
+                "Improve the lowest scoring platform first",
+                "Add public proof for claimed skills",
+                "Keep resume, projects, and GitHub technologies consistent",
+            ],
+        }
+
+    return cached("calculate-skillproof-score", payload_to_dict(payload), produce)
 
 
 @app.post("/detect-fake-skills")
 def detect_fake_skills(payload: FakeSkillPayload) -> Dict[str, Any]:
-    all_skills = unique(payload.profile_skills + payload.resume_skills + payload.project_tech_stacks)
-    github = set(skill.lower() for skill in payload.github_skills)
-    projects = set(skill.lower() for skill in payload.project_tech_stacks)
-    resume = set(skill.lower() for skill in payload.resume_skills)
-    verification = []
-    for skill in all_skills:
-        confidence = 0
-        if skill.lower() in resume:
-            confidence += 20
-        if skill.lower() in projects:
-            confidence += 35
-        if skill.lower() in github:
-            confidence += 35
-        if skill.lower() in {"dsa", "sql", "java", "python"} and payload.coding_profile_data:
-            confidence += 10
-        proof = "Strong Proof" if confidence >= 80 else "Medium Proof" if confidence >= 55 else "Weak Proof" if confidence >= 25 else "No Proof Found"
-        verification.append(
-            {
-                "skillName": skill,
-                "proofLevel": proof,
-                "confidenceScore": clamp(confidence),
-                "suggestion": "Strong verified signal" if confidence >= 80 else f"Add project, GitHub, or certification proof for {skill}",
-            }
-        )
-    return {"skillVerificationList": verification}
+    def produce() -> Dict[str, Any]:
+        all_skills = unique(payload.profile_skills + payload.resume_skills + payload.project_tech_stacks)
+        github = set(skill.lower() for skill in payload.github_skills)
+        projects = set(skill.lower() for skill in payload.project_tech_stacks)
+        resume = set(skill.lower() for skill in payload.resume_skills)
+        verification = []
+        for skill in all_skills:
+            confidence = 0
+            if skill.lower() in resume:
+                confidence += 20
+            if skill.lower() in projects:
+                confidence += 35
+            if skill.lower() in github:
+                confidence += 35
+            if skill.lower() in {"dsa", "sql", "java", "python"} and payload.coding_profile_data:
+                confidence += 10
+            proof = "Strong Proof" if confidence >= 80 else "Medium Proof" if confidence >= 55 else "Weak Proof" if confidence >= 25 else "No Proof Found"
+            verification.append(
+                {
+                    "skillName": skill,
+                    "proofLevel": proof,
+                    "confidenceScore": clamp(confidence),
+                    "suggestion": "Strong verified signal" if confidence >= 80 else f"Add project, GitHub, or certification proof for {skill}",
+                }
+            )
+        return {"skillVerificationList": verification}
+
+    return cached("detect-fake-skills", payload_to_dict(payload), produce)
 
 
 @app.post("/generate-roadmap")
 def generate_roadmap(payload: RoadmapPayload) -> Dict[str, Any]:
-    duration = payload.duration if payload.duration in {7, 15, 30, 60} else 30
-    target = payload.target_drive or payload.target_company or "placement readiness"
-    weak = payload.weak_skills or ["DSA", "Resume", "GitHub", "Interview"]
-    daily_tasks = []
-    categories = ["DSA", "Resume", "GitHub", "Project", "Interview", "SQL", "Communication"]
-    for day in range(1, duration + 1):
-        skill = weak[(day - 1) % len(weak)]
-        category = categories[(day - 1) % len(categories)]
-        daily_tasks.append(
-            {
-                "day": day,
-                "title": f"Day {day}: strengthen {skill}",
-                "description": f"Complete one focused {category} task for {target}.",
-                "category": category,
-                "priority": "HIGH" if day <= 7 else "MEDIUM" if day <= 21 else "LOW",
-            }
-        )
-    weeks = [
-        {"week": index + 1, "goal": f"Close {weak[index % len(weak)]} gap", "tasks": daily_tasks[index * 7 : (index + 1) * 7]}
-        for index in range((duration + 6) // 7)
-    ]
-    return {"roadmapTitle": f"{duration}-day roadmap for {target}", "weeklyPlan": weeks, "dailyTasks": daily_tasks, "priorities": weak}
+    def produce() -> Dict[str, Any]:
+        duration = payload.duration if payload.duration in {7, 15, 30, 60} else 30
+        target = payload.target_drive or payload.target_company or "placement readiness"
+        weak = payload.weak_skills or ["DSA", "Resume", "GitHub", "Interview"]
+        daily_tasks = []
+        categories = ["DSA", "Resume", "GitHub", "Project", "Interview", "SQL", "Communication"]
+        for day in range(1, duration + 1):
+            skill = weak[(day - 1) % len(weak)]
+            category = categories[(day - 1) % len(categories)]
+            daily_tasks.append(
+                {
+                    "day": day,
+                    "title": f"Day {day}: strengthen {skill}",
+                    "description": f"Complete one focused {category} task for {target}.",
+                    "category": category,
+                    "priority": "HIGH" if day <= 7 else "MEDIUM" if day <= 21 else "LOW",
+                }
+            )
+        weeks = [
+            {"week": index + 1, "goal": f"Close {weak[index % len(weak)]} gap", "tasks": daily_tasks[index * 7 : (index + 1) * 7]}
+            for index in range((duration + 6) // 7)
+        ]
+        return {"roadmapTitle": f"{duration}-day roadmap for {target}", "weeklyPlan": weeks, "dailyTasks": daily_tasks, "priorities": weak}
+
+    return cached("generate-roadmap", payload_to_dict(payload), produce)
 
 
 @app.post("/calculate-readiness")

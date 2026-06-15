@@ -30,6 +30,7 @@ import type {
   Drive,
   GitHubProfile,
   HackerRankProfile,
+  JobStatus,
   JobMatchResult,
   LeetCodeProfile,
   Paginated,
@@ -411,16 +412,38 @@ export function HackerRankAnalysisPage() {
 
 export function ResumeAnalysisPage() {
   const queryClient = useQueryClient();
+  const [jobId, setJobId] = React.useState("");
   const resume = useQuery({ queryKey: ["resume-analysis"], queryFn: () => apiFetch<ResumeAnalysis | null>("/ai/resume/latest") });
+  const job = useQuery({
+    queryKey: ["job", jobId],
+    enabled: Boolean(jobId),
+    queryFn: () => apiFetch<JobStatus>(`/jobs/${jobId}`),
+    refetchInterval: jobId ? 1000 : false
+  });
   const analyze = useMutation({
-    mutationFn: (body: Record<string, unknown>) => apiFetch<ResumeAnalysis>("/ai/resume/analyze", { method: "POST", body }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["resume-analysis"] });
-      queryClient.invalidateQueries({ queryKey: ["skillproof"] });
-      toast({ title: "Resume analyzed" });
+    mutationFn: (body: Record<string, unknown>) => apiFetch<JobStatus>("/ai/resume/analyze", { method: "POST", body }),
+    onSuccess: (queuedJob) => {
+      setJobId(queuedJob.id);
+      toast({ title: "Resume analysis queued", description: "You can keep using the dashboard while analysis runs." });
     }
   });
+
+  React.useEffect(() => {
+    if (job.data?.status === "completed") {
+      queryClient.invalidateQueries({ queryKey: ["resume-analysis"] });
+      queryClient.invalidateQueries({ queryKey: ["skillproof"] });
+      toast({ title: "Resume analyzed", description: "Latest scores are ready." });
+      setJobId("");
+    }
+    if (job.data?.status === "failed") {
+      toast({ title: "Resume analysis failed", description: job.data.errorMessage ?? "Please try again.", variant: "destructive" });
+      setJobId("");
+    }
+  }, [job.data?.errorMessage, job.data?.status, queryClient]);
+
   const data = resume.data;
+  const jobStatus = job.data;
+  const isAnalyzing = analyze.isPending || Boolean(jobId);
 
   return (
     <div className="grid gap-6">
@@ -435,8 +458,17 @@ export function ResumeAnalysisPage() {
           }}>
             <Input name="resumeUrl" placeholder="/uploads/resume.pdf or https://..." defaultValue={data?.resumeUrl ?? ""} />
             <Textarea name="resumeText" placeholder="Paste resume text here for analysis" rows={8} />
-            <Button className="w-fit" disabled={analyze.isPending}><UploadCloud className="mr-2 h-4 w-4" /> {analyze.isPending ? "Analyzing..." : "Analyze Resume"}</Button>
+            <Button className="w-fit" disabled={isAnalyzing}><UploadCloud className="mr-2 h-4 w-4" /> {isAnalyzing ? "Analyzing..." : "Analyze Resume"}</Button>
           </form>
+          {jobStatus ? (
+            <div className="mt-4 rounded-xl border bg-muted/25 p-4">
+              <div className="mb-2 flex items-center justify-between text-sm">
+                <span className="font-medium">Resume analysis {toTitle(jobStatus.status)}</span>
+                <span className="font-semibold">{jobStatus.progress}%</span>
+              </div>
+              <Progress value={jobStatus.progress} />
+            </div>
+          ) : null}
         </CardContent>
       </Card>
       {resume.isLoading ? <LoadingSkeleton rows={5} /> : data ? (
@@ -602,13 +634,13 @@ export function SkillVerificationPage() {
 }
 
 export function TpoTopStudentsPage() {
-  const query = useQuery({ queryKey: ["tpo-top-students"], queryFn: () => apiFetch<Array<Record<string, unknown>>>("/tpo/reports/top-students") });
+  const query = useQuery({ queryKey: ["tpo-top-students"], queryFn: () => apiFetch<Paginated<Record<string, unknown>>>("/tpo/reports/top-students?limit=25") });
   if (query.isLoading) return <LoadingSkeleton rows={5} />;
   return (
     <div className="grid gap-6">
       <PageHeader eyebrow="Stage 2 reports" title="Top students by SkillProof" description="Rank students using SkillProof score, readiness, platform proof, and resume quality." />
       <div className="grid gap-4">
-        {(query.data ?? []).map((student) => (
+        {(query.data?.items ?? []).map((student) => (
           <Card key={String(student.id)} className="soft-shadow">
             <CardContent className="grid gap-3 p-5 md:grid-cols-[1.5fr_repeat(5,1fr)] md:items-center">
               <div><p className="font-semibold">{String(student.name)}</p><p className="text-sm text-muted-foreground">{String(student.branch ?? "Branch NA")} - CGPA {String(student.cgpa ?? "NA")}</p></div>
@@ -635,7 +667,7 @@ function ScoreMini({ label, value }: { label: string; value: number }) {
 }
 
 export function TpoSkillGapReportPage() {
-  const query = useQuery({ queryKey: ["tpo-skill-gap"], queryFn: () => apiFetch<{ mostMissingSkills: Array<{ name: string; count: number }>; suggestedTrainingSessions: string[]; companyWiseGaps: Array<Record<string, unknown>> }>("/tpo/reports/skill-gap") });
+  const query = useQuery({ queryKey: ["tpo-skill-gap"], queryFn: () => apiFetch<{ mostMissingSkills: Array<{ name: string; count: number }>; suggestedTrainingSessions: string[]; companyWiseGaps: Array<Record<string, unknown>> }>("/tpo/reports/skill-gap?limit=25") });
   if (query.isLoading) return <LoadingSkeleton rows={5} />;
   return (
     <div className="grid gap-6">
@@ -658,7 +690,7 @@ export function TpoSkillGapReportPage() {
 export function TpoCompanyFitReportPage() {
   const drives = useQuery({ queryKey: ["drives"], queryFn: () => apiFetch<Paginated<Drive>>("/drives?limit=50") });
   const [driveId, setDriveId] = React.useState("");
-  const report = useQuery({ queryKey: ["company-fit-report", driveId], enabled: Boolean(driveId), queryFn: () => apiFetch<{ students: Array<Record<string, unknown>> }>(`/tpo/reports/company-fit/${driveId}`) });
+  const report = useQuery({ queryKey: ["company-fit-report", driveId], enabled: Boolean(driveId), queryFn: () => apiFetch<{ students: Array<Record<string, unknown>> }>(`/tpo/reports/company-fit/${driveId}?limit=25`) });
   return (
     <div className="grid gap-6">
       <PageHeader eyebrow="Company fit" title="Company fit report" description="Recommended candidates and match scores for each drive." />
@@ -691,7 +723,7 @@ export function TpoDriveRecommendationsPage() {
 }
 
 export function TpoWeakSkillsReportPage() {
-  const query = useQuery({ queryKey: ["tpo-weak-skills"], queryFn: () => apiFetch<{ weakSkills: Array<{ name: string; count: number }>; students: Array<Record<string, unknown>> }>("/tpo/reports/weak-skills") });
+  const query = useQuery({ queryKey: ["tpo-weak-skills"], queryFn: () => apiFetch<{ weakSkills: Array<{ name: string; count: number }>; students: Array<Record<string, unknown>> }>("/tpo/reports/weak-skills?limit=25") });
   if (query.isLoading) return <LoadingSkeleton rows={5} />;
   return (
     <div className="grid gap-6">
