@@ -1,27 +1,39 @@
 "use client";
 
 import * as React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowRight,
   BadgeCheck,
   BriefcaseBusiness,
   CalendarClock,
+  CheckCircle2,
   Code2,
   FileText,
   Gauge,
+  Github,
   GraduationCap,
   Lightbulb,
   ListChecks,
+  MapPin,
   Plus,
+  Search,
+  SlidersHorizontal,
+  UploadCloud,
   UserRound
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { Application, Drive, Paginated, Readiness, StudentProfile } from "@/lib/types";
 import { formatCurrency, formatDate, toTitle } from "@/lib/utils";
 import { ApplicationKanban } from "@/components/kanban";
+import { EmptyState } from "@/components/empty-state";
+import { LoadingSkeleton } from "@/components/loading-skeleton";
+import { PageHeader } from "@/components/page-header";
 import { ReadinessRing } from "@/components/readiness-ring";
 import { SimpleBarChart, SimplePieChart } from "@/components/charts";
 import { StatCard } from "@/components/stat-card";
+import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,6 +43,8 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/use-toast";
+
+type Eligibility = { status: string; reason: string };
 
 function useStudentProfile() {
   return useQuery({
@@ -64,11 +78,47 @@ function profileCompletion(profile?: StudentProfile) {
   return Math.round((fields.filter(Boolean).length / fields.length) * 100);
 }
 
-function Field({ label, name, defaultValue, type = "text" }: { label: string; name: string; defaultValue?: string | number | null; type?: string }) {
+function Field({
+  label,
+  name,
+  defaultValue,
+  type = "text",
+  placeholder
+}: {
+  label: string;
+  name: string;
+  defaultValue?: string | number | null;
+  type?: string;
+  placeholder?: string;
+}) {
   return (
     <div className="grid gap-2">
       <Label htmlFor={name}>{label}</Label>
-      <Input id={name} name={name} type={type} defaultValue={defaultValue ?? ""} />
+      <Input id={name} name={name} type={type} defaultValue={defaultValue ?? ""} placeholder={placeholder} />
+    </div>
+  );
+}
+
+function SuggestionList({ suggestions }: { suggestions: string[] }) {
+  if (!suggestions.length) {
+    return (
+      <EmptyState
+        icon={Lightbulb}
+        title="No suggestions yet"
+        message="Complete your placement profile to unlock personalized improvement suggestions."
+        className="min-h-44"
+      />
+    );
+  }
+
+  return (
+    <div className="grid gap-3">
+      {suggestions.map((suggestion) => (
+        <div key={suggestion} className="flex items-start gap-3 rounded-xl border bg-muted/25 p-3 text-sm">
+          <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <span className="leading-6">{suggestion}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -85,6 +135,8 @@ export function StudentDashboardPage() {
   const readiness = readinessQuery.data;
   const applications = applicationsQuery.data ?? [];
   const activeApps = applications.filter((item) => !["REJECTED", "WITHDRAWN", "SELECTED"].includes(item.status)).length;
+  const completion = profileCompletion(profile);
+  const linkedProfiles = [profile?.githubUsername, profile?.leetcodeUsername, profile?.hackerrankUsername].filter(Boolean).length;
   const skillDistribution = Object.entries(
     (profile?.skills ?? []).reduce<Record<string, number>>((acc, skill) => {
       acc[skill.category] = (acc[skill.category] ?? 0) + 1;
@@ -98,33 +150,46 @@ export function StudentDashboardPage() {
     }, {})
   ).map(([status, count]) => ({ status, count }));
 
+  if (profileQuery.isLoading && readinessQuery.isLoading) return <LoadingSkeleton rows={5} />;
+
   return (
     <div className="grid gap-6">
-      <div>
-        <h2 className="text-3xl font-semibold tracking-tight">Student dashboard</h2>
-        <p className="text-muted-foreground">Your readiness, proof, applications, and next improvements.</p>
-      </div>
+      <PageHeader
+        eyebrow="Student workspace"
+        title="Placement dashboard"
+        description="Your readiness, proof, applications, and next improvements in one place."
+        actions={
+          <>
+            <Button variant="outline" asChild>
+              <Link href="/student/profile">Update profile</Link>
+            </Button>
+            <Button asChild>
+              <Link href="/student/drives">Explore drives <ArrowRight className="ml-2 h-4 w-4" /></Link>
+            </Button>
+          </>
+        }
+      />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <Card className="xl:col-span-2">
+        <Card className="soft-shadow xl:col-span-2">
           <CardHeader>
             <CardTitle>Placement Readiness Score</CardTitle>
-            <CardDescription>Rule-based score for Stage 1.</CardDescription>
+            <CardDescription>Live score from your latest Stage 1 profile data.</CardDescription>
           </CardHeader>
           <CardContent>
             <ReadinessRing score={readiness?.score ?? profile?.readinessScore ?? 0} level={readiness?.level ?? "Not Ready"} />
           </CardContent>
         </Card>
-        <div className="grid gap-4 xl:col-span-3 md:grid-cols-2 xl:grid-cols-3">
-          <StatCard title="Profile Completion" value={`${profileCompletion(profile)}%`} helper="Personal and career fields" icon={UserRound} />
+        <div className="grid gap-4 md:grid-cols-2 xl:col-span-3 xl:grid-cols-3">
+          <StatCard title="Profile Completion" value={`${completion}%`} helper="Academic and career fields" icon={UserRound} />
           <StatCard title="Active Applications" value={activeApps} helper="In progress" icon={ListChecks} />
           <StatCard title="Upcoming Deadlines" value={applications.length} helper="Saved and applied drives" icon={CalendarClock} />
-          <StatCard title="Coding Profiles" value={[profile?.githubUsername, profile?.leetcodeUsername, profile?.hackerrankUsername].filter(Boolean).length} helper="Linked usernames" icon={Code2} />
+          <StatCard title="Coding Profiles" value={linkedProfiles} helper="GitHub, LeetCode, HackerRank" icon={Code2} />
           <StatCard title="Projects" value={profile?.projects?.length ?? 0} helper="Proof of work" icon={BriefcaseBusiness} />
-          <StatCard title="Resume" value={profile?.resumeUrl ? "Uploaded" : "Missing"} helper="Local/mock upload ready" icon={FileText} />
+          <StatCard title="Resume Status" value={profile?.resumeUrl ? "Uploaded" : "Missing"} helper="Resume proof" icon={FileText} />
         </div>
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card>
+        <Card className="soft-shadow">
           <CardHeader><CardTitle>Readiness breakdown</CardTitle></CardHeader>
           <CardContent>
             <SimpleBarChart
@@ -134,31 +199,26 @@ export function StudentDashboardPage() {
             />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="soft-shadow">
           <CardHeader><CardTitle>Applications by status</CardTitle></CardHeader>
           <CardContent>
             <SimplePieChart data={applicationsByStatus} nameKey="status" valueKey="count" />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="soft-shadow">
           <CardHeader><CardTitle>Skill distribution</CardTitle></CardHeader>
           <CardContent>
             <SimplePieChart data={skillDistribution} nameKey="category" valueKey="count" />
           </CardContent>
         </Card>
       </div>
-      <Card>
+      <Card className="soft-shadow">
         <CardHeader>
           <CardTitle>Suggested improvements</CardTitle>
           <CardDescription>Highest-impact changes based on Stage 1 scoring.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3">
-          {(readiness?.suggestions ?? ["Complete your profile to unlock suggestions."]).map((suggestion) => (
-            <div key={suggestion} className="flex items-start gap-3 rounded-md border bg-muted/30 p-3 text-sm">
-              <Lightbulb className="mt-0.5 h-4 w-4 text-primary" />
-              {suggestion}
-            </div>
-          ))}
+        <CardContent>
+          <SuggestionList suggestions={readiness?.suggestions ?? []} />
         </CardContent>
       </Card>
     </div>
@@ -174,23 +234,32 @@ export function StudentProfilePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["student-profile"] });
       queryClient.invalidateQueries({ queryKey: ["student-readiness"] });
-      toast({ title: "Profile updated" });
+      toast({ title: "Profile updated", description: "Your readiness score will refresh automatically." });
     }
   });
   const addSkill = useMutation({
     mutationFn: (body: Record<string, unknown>) => apiFetch("/students/me/skills", { method: "POST", body }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["student-profile"] })
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["student-profile"] });
+      toast({ title: "Skill added" });
+    }
   });
   const addProject = useMutation({
     mutationFn: (body: Record<string, unknown>) => apiFetch("/students/me/projects", { method: "POST", body }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["student-profile"] })
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["student-profile"] });
+      toast({ title: "Project added" });
+    }
   });
   const addEducation = useMutation({
     mutationFn: (body: Record<string, unknown>) => apiFetch("/students/me/education", { method: "POST", body }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["student-profile"] })
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["student-profile"] });
+      toast({ title: "Education added" });
+    }
   });
 
-  if (profileQuery.isLoading) return <p className="text-muted-foreground">Loading profile...</p>;
+  if (profileQuery.isLoading) return <LoadingSkeleton rows={6} />;
 
   function submitProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -214,20 +283,25 @@ export function StudentProfilePage() {
 
   return (
     <div className="grid gap-6">
-      <div>
-        <h2 className="text-3xl font-semibold tracking-tight">My placement profile</h2>
-        <p className="text-muted-foreground">Keep your academic, career, skill, project, and education proof current.</p>
-      </div>
-      <Tabs defaultValue="profile">
-        <TabsList className="flex-wrap">
+      <PageHeader
+        eyebrow="SkillProof profile"
+        title="My placement profile"
+        description="Keep your academic, career, skill, project, and education proof current."
+        badge={`${profileCompletion(profile)}% complete`}
+      />
+      <Tabs defaultValue="profile" className="grid gap-4">
+        <TabsList className="h-auto flex-wrap justify-start rounded-xl bg-muted/60 p-1">
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="skills">Skills</TabsTrigger>
           <TabsTrigger value="projects">Projects</TabsTrigger>
           <TabsTrigger value="education">Education</TabsTrigger>
         </TabsList>
         <TabsContent value="profile">
-          <Card>
-            <CardHeader><CardTitle>Personal and career details</CardTitle></CardHeader>
+          <Card className="soft-shadow">
+            <CardHeader>
+              <CardTitle>Personal and career details</CardTitle>
+              <CardDescription>These details drive profile completion and company eligibility.</CardDescription>
+            </CardHeader>
             <CardContent>
               <form className="grid gap-4 md:grid-cols-2" onSubmit={submitProfile}>
                 <Field label="Phone" name="phone" defaultValue={profile?.phone} />
@@ -239,7 +313,7 @@ export function StudentProfilePage() {
                 <Field label="Active backlogs" name="activeBacklogs" type="number" defaultValue={profile?.activeBacklogs} />
                 <Field label="Location" name="location" defaultValue={profile?.location} />
                 <Field label="Target role" name="targetRole" defaultValue={profile?.targetRole} />
-                <Field label="Preferred companies comma separated" name="preferredCompanies" defaultValue={profile?.preferredCompanies?.join(", ")} />
+                <Field label="Preferred companies" name="preferredCompanies" defaultValue={profile?.preferredCompanies?.join(", ")} placeholder="TCS, Amazon, Infosys" />
                 <Field label="Preferred location" name="preferredLocation" defaultValue={profile?.preferredLocation} />
                 <Field label="Expected salary" name="expectedSalary" type="number" defaultValue={profile?.expectedSalary} />
                 <div className="grid gap-2">
@@ -254,15 +328,18 @@ export function StudentProfilePage() {
                   </Select>
                 </div>
                 <div className="md:col-span-2">
-                  <Button disabled={updateProfile.isPending}>Save profile</Button>
+                  <Button disabled={updateProfile.isPending}>{updateProfile.isPending ? "Saving..." : "Save profile"}</Button>
                 </div>
               </form>
             </CardContent>
           </Card>
         </TabsContent>
         <TabsContent value="skills">
-          <Card>
-            <CardHeader><CardTitle>Skills</CardTitle></CardHeader>
+          <Card className="soft-shadow">
+            <CardHeader>
+              <CardTitle>Skills</CardTitle>
+              <CardDescription>Add technologies, categories, and confidence levels.</CardDescription>
+            </CardHeader>
             <CardContent className="grid gap-4">
               <form
                 className="grid gap-3 md:grid-cols-4"
@@ -276,25 +353,32 @@ export function StudentProfilePage() {
                 <Input name="name" placeholder="React" required />
                 <Input name="category" placeholder="Framework" required />
                 <Input name="level" type="number" min={1} max={5} defaultValue={3} />
-                <Button><Plus className="mr-2 h-4 w-4" /> Add skill</Button>
+                <Button disabled={addSkill.isPending}><Plus className="mr-2 h-4 w-4" /> Add skill</Button>
               </form>
-              <div className="grid gap-3 md:grid-cols-2">
-                {profile?.skills?.map((skill) => (
-                  <div key={skill.id} className="rounded-md border p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{skill.name}</span>
-                      <Badge variant="secondary">{skill.category}</Badge>
+              {profile?.skills?.length ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {profile.skills.map((skill) => (
+                    <div key={skill.id} className="rounded-xl border bg-background/60 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-medium">{skill.name}</span>
+                        <Badge variant="secondary">{skill.category}</Badge>
+                      </div>
+                      <Progress className="mt-3" value={skill.level * 20} />
                     </div>
-                    <Progress className="mt-3" value={skill.level * 20} />
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState icon={Code2} title="No skills added yet" message="Add your strongest technical skills so companies can match you faster." />
+              )}
             </CardContent>
           </Card>
         </TabsContent>
         <TabsContent value="projects">
-          <Card>
-            <CardHeader><CardTitle>Projects</CardTitle></CardHeader>
+          <Card className="soft-shadow">
+            <CardHeader>
+              <CardTitle>Projects</CardTitle>
+              <CardDescription>Show real proof of work with technologies and links.</CardDescription>
+            </CardHeader>
             <CardContent className="grid gap-4">
               <form
                 className="grid gap-3 md:grid-cols-2"
@@ -318,25 +402,32 @@ export function StudentProfilePage() {
                 <Input name="githubUrl" placeholder="https://github.com/..." />
                 <Input name="liveUrl" placeholder="https://..." />
                 <Input name="description" placeholder="Short description" required />
-                <Button className="md:col-span-2"><Plus className="mr-2 h-4 w-4" /> Add project</Button>
+                <Button className="md:col-span-2" disabled={addProject.isPending}><Plus className="mr-2 h-4 w-4" /> Add project</Button>
               </form>
-              <div className="grid gap-3 md:grid-cols-2">
-                {profile?.projects?.map((project) => (
-                  <div key={project.id} className="rounded-md border p-4">
-                    <div className="font-medium">{project.title}</div>
-                    <p className="mt-1 text-sm text-muted-foreground">{project.description}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {project.techStack.map((tech) => <Badge key={tech} variant="outline">{tech}</Badge>)}
+              {profile?.projects?.length ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {profile.projects.map((project) => (
+                    <div key={project.id} className="rounded-xl border bg-background/60 p-4">
+                      <div className="font-medium">{project.title}</div>
+                      <p className="mt-1 text-sm leading-6 text-muted-foreground">{project.description}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {project.techStack.map((tech) => <Badge key={tech} variant="outline">{tech}</Badge>)}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState icon={BriefcaseBusiness} title="No projects added yet" message="Add projects to strengthen your SkillProof profile and readiness score." />
+              )}
             </CardContent>
           </Card>
         </TabsContent>
         <TabsContent value="education">
-          <Card>
-            <CardHeader><CardTitle>Education</CardTitle></CardHeader>
+          <Card className="soft-shadow">
+            <CardHeader>
+              <CardTitle>Education</CardTitle>
+              <CardDescription>Record degrees, institutes, years, and scores.</CardDescription>
+            </CardHeader>
             <CardContent className="grid gap-4">
               <form
                 className="grid gap-3 md:grid-cols-5"
@@ -358,14 +449,22 @@ export function StudentProfilePage() {
                 <Input name="startYear" type="number" placeholder="2023" required />
                 <Input name="endYear" type="number" placeholder="2027" />
                 <Input name="score" placeholder="8.2 CGPA" />
-                <Button className="md:col-span-5"><Plus className="mr-2 h-4 w-4" /> Add education</Button>
+                <Button className="md:col-span-5" disabled={addEducation.isPending}><Plus className="mr-2 h-4 w-4" /> Add education</Button>
               </form>
-              {profile?.education?.map((item) => (
-                <div key={item.id} className="rounded-md border p-3">
-                  <div className="font-medium">{item.degree}</div>
-                  <div className="text-sm text-muted-foreground">{item.institute} • {item.startYear}-{item.endYear ?? "Present"} • {item.score}</div>
+              {profile?.education?.length ? (
+                <div className="grid gap-3">
+                  {profile.education.map((item) => (
+                    <div key={item.id} className="rounded-xl border bg-background/60 p-4">
+                      <div className="font-medium">{item.degree}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {item.institute} - {item.startYear}-{item.endYear ?? "Present"} - {item.score}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              ) : (
+                <EmptyState icon={GraduationCap} title="No education history yet" message="Add your academic records so eligibility checks can work accurately." />
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -382,31 +481,48 @@ export function ResumeUploadPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["student-profile"] });
       queryClient.invalidateQueries({ queryKey: ["student-readiness"] });
-      toast({ title: "Resume saved", description: "Stage 1 stores the resume URL/path placeholder." });
+      toast({ title: "Resume saved", description: "Stage 1 stores the resume URL or path placeholder." });
     }
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Resume upload placeholder</CardTitle>
-        <CardDescription>Use a local path or URL now. Cloud storage can replace this contract later.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        <div className="rounded-md border bg-muted/30 p-4 text-sm">Current: {profileQuery.data?.resumeUrl ?? "No resume added"}</div>
-        <form
-          className="grid gap-3 md:grid-cols-[1fr_auto]"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const form = new FormData(event.currentTarget);
-            mutation.mutate(String(form.get("resumeUrl")));
-          }}
-        >
-          <Input name="resumeUrl" placeholder="/uploads/my-resume.pdf or https://..." required />
-          <Button disabled={mutation.isPending}>Save resume</Button>
-        </form>
-      </CardContent>
-    </Card>
+    <div className="grid gap-6">
+      <PageHeader
+        eyebrow="Resume proof"
+        title="Resume upload"
+        description="Store a resume URL or local path for Stage 1. Cloud upload can replace the storage layer later."
+      />
+      <Card className="soft-shadow">
+        <CardHeader>
+          <CardTitle>Resume source</CardTitle>
+          <CardDescription>Use a local path or URL now. The API contract remains unchanged.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          {profileQuery.data?.resumeUrl ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl border bg-muted/25 p-4 text-sm">
+              <div>
+                <p className="font-medium">Current resume</p>
+                <p className="break-all text-muted-foreground">{profileQuery.data.resumeUrl}</p>
+              </div>
+              <StatusBadge status="COMPLETED" label="Uploaded" />
+            </div>
+          ) : (
+            <EmptyState icon={UploadCloud} title="No resume uploaded" message="Add a resume path or URL to improve your readiness score." className="min-h-44" />
+          )}
+          <form
+            className="grid gap-3 md:grid-cols-[1fr_auto]"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              mutation.mutate(String(form.get("resumeUrl")));
+            }}
+          >
+            <Input name="resumeUrl" placeholder="/uploads/my-resume.pdf or https://..." required />
+            <Button disabled={mutation.isPending}>{mutation.isPending ? "Saving..." : "Save resume"}</Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -424,42 +540,69 @@ export function CodingProfilesPage() {
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Coding profile connections</CardTitle>
-        <CardDescription>Stage 1 stores usernames only. Never ask students for platform passwords.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form
-          className="grid gap-4 md:grid-cols-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const form = new FormData(event.currentTarget);
-            mutation.mutate({
-              githubUsername: String(form.get("githubUsername") ?? ""),
-              leetcodeUsername: String(form.get("leetcodeUsername") ?? ""),
-              hackerrankUsername: String(form.get("hackerrankUsername") ?? "")
-            });
-          }}
-        >
-          <Field label="GitHub username" name="githubUsername" defaultValue={profile?.githubUsername} />
-          <Field label="LeetCode username" name="leetcodeUsername" defaultValue={profile?.leetcodeUsername} />
-          <Field label="HackerRank username" name="hackerrankUsername" defaultValue={profile?.hackerrankUsername} />
-          <div className="md:col-span-3">
-            <Button disabled={mutation.isPending}>Save usernames</Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+    <div className="grid gap-6">
+      <PageHeader
+        eyebrow="SkillProof links"
+        title="Coding profile connections"
+        description="Stage 1 stores usernames only. Never share platform passwords."
+      />
+      <div className="grid gap-4 md:grid-cols-3">
+        {[
+          ["GitHub", profile?.githubUsername],
+          ["LeetCode", profile?.leetcodeUsername],
+          ["HackerRank", profile?.hackerrankUsername]
+        ].map(([platform, username]) => (
+          <Card key={platform} className="soft-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-base">{platform}</CardTitle>
+              {platform === "GitHub" ? <Github className="h-4 w-4 text-primary" /> : <Code2 className="h-4 w-4 text-primary" />}
+            </CardHeader>
+            <CardContent>
+              {username ? (
+                <div>
+                  <p className="font-mono text-sm">{username}</p>
+                  <StatusBadge status="COMPLETED" label="Connected" className="mt-2" />
+                </div>
+              ) : (
+                <StatusBadge status="NOT_STARTED" label="Not connected" />
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <Card className="soft-shadow">
+        <CardHeader>
+          <CardTitle>Update usernames</CardTitle>
+          <CardDescription>These usernames contribute to your coding proof profile.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form
+            className="grid gap-4 md:grid-cols-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              mutation.mutate({
+                githubUsername: String(form.get("githubUsername") ?? ""),
+                leetcodeUsername: String(form.get("leetcodeUsername") ?? ""),
+                hackerrankUsername: String(form.get("hackerrankUsername") ?? "")
+              });
+            }}
+          >
+            <Field label="GitHub username" name="githubUsername" defaultValue={profile?.githubUsername} />
+            <Field label="LeetCode username" name="leetcodeUsername" defaultValue={profile?.leetcodeUsername} />
+            <Field label="HackerRank username" name="hackerrankUsername" defaultValue={profile?.hackerrankUsername} />
+            <div className="md:col-span-3">
+              <Button disabled={mutation.isPending}>{mutation.isPending ? "Saving..." : "Save usernames"}</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
-function DriveCard({ drive }: { drive: Drive }) {
+function DriveCard({ drive, eligibility }: { drive: Drive; eligibility?: Eligibility }) {
   const queryClient = useQueryClient();
-  const eligibilityQuery = useQuery({
-    queryKey: ["drive-eligibility", drive.id],
-    queryFn: () => apiFetch<{ status: string; reason: string }>(`/drives/${drive.id}/eligibility`)
-  });
   const applyMutation = useMutation({
     mutationFn: () => apiFetch<Application>("/applications", { method: "POST", body: { driveId: drive.id } }),
     onSuccess: () => {
@@ -468,37 +611,48 @@ function DriveCard({ drive }: { drive: Drive }) {
     },
     onError: (error) => toast({ title: "Could not apply", description: error instanceof Error ? error.message : "Try another drive.", variant: "destructive" })
   });
-  const eligibility = eligibilityQuery.data;
+  const eligibilityStatus = eligibility?.status ?? "CHECKING";
 
   return (
-    <Card>
+    <Card className="soft-shadow overflow-hidden transition-all hover:-translate-y-1">
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle>{drive.company.name}</CardTitle>
-            <CardDescription>{drive.role} • {drive.location}</CardDescription>
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border bg-muted/40 text-base font-semibold text-primary">
+              {drive.company.name.slice(0, 2).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <CardTitle className="truncate">{drive.company.name}</CardTitle>
+              <CardDescription className="mt-1">{drive.role}</CardDescription>
+            </div>
           </div>
-          <Badge variant={drive.status === "OPEN" ? "success" : "secondary"}>{toTitle(drive.status)}</Badge>
+          <StatusBadge status={drive.status} />
         </div>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <p className="text-sm text-muted-foreground">{drive.description}</p>
+        <p className="line-clamp-3 text-sm leading-6 text-muted-foreground">{drive.description}</p>
         <div className="grid gap-2 text-sm sm:grid-cols-2">
-          <div>CTC: <span className="font-medium">{formatCurrency(drive.ctc)}</span></div>
-          <div>Deadline: <span className="font-medium">{formatDate(drive.applicationDeadline)}</span></div>
-          <div>Min CGPA: <span className="font-medium">{drive.minimumCgpa}</span></div>
-          <div>Backlogs: <span className="font-medium">Max {drive.maxBacklogs}</span></div>
+          <div className="flex items-center gap-2"><BriefcaseBusiness className="h-4 w-4 text-primary" /> {formatCurrency(drive.ctc)}</div>
+          <div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" /> {drive.location}</div>
+          <div className="flex items-center gap-2"><CalendarClock className="h-4 w-4 text-primary" /> {formatDate(drive.applicationDeadline)}</div>
+          <div className="flex items-center gap-2"><Gauge className="h-4 w-4 text-primary" /> CGPA {drive.minimumCgpa}+ / Max {drive.maxBacklogs} backlogs</div>
         </div>
-        <div className="flex flex-wrap gap-2">{drive.requiredSkills.map((skill) => <Badge key={skill} variant="outline">{skill}</Badge>)}</div>
-        <div className="rounded-md border bg-muted/30 p-3 text-sm">
-          <div className="font-medium">{eligibility ? toTitle(eligibility.status) : "Checking eligibility..."}</div>
-          <p className="mt-1 text-muted-foreground">{eligibility?.reason}</p>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="secondary">{toTitle(drive.jobType)}</Badge>
+          {drive.requiredSkills.map((skill) => <Badge key={skill} variant="outline">{skill}</Badge>)}
+        </div>
+        <div className="rounded-xl border bg-muted/25 p-3 text-sm">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <span className="font-medium">Eligibility</span>
+            <StatusBadge status={eligibilityStatus} label={eligibility ? toTitle(eligibility.status) : "Checking"} />
+          </div>
+          <p className="leading-6 text-muted-foreground">{eligibility?.reason ?? "Checking your profile against this drive."}</p>
         </div>
         <Button
           disabled={applyMutation.isPending || eligibility?.status === "NOT_ELIGIBLE"}
           onClick={() => applyMutation.mutate()}
         >
-          Apply to drive
+          {applyMutation.isPending ? "Applying..." : "Apply to drive"}
         </Button>
       </CardContent>
     </Card>
@@ -506,20 +660,108 @@ function DriveCard({ drive }: { drive: Drive }) {
 }
 
 export function StudentDrivesPage() {
+  const [search, setSearch] = React.useState("");
+  const [jobType, setJobType] = React.useState("all");
+  const [eligibility, setEligibility] = React.useState("all");
+  const [status, setStatus] = React.useState("all");
+  const [sortBy, setSortBy] = React.useState("deadline-asc");
   const drivesQuery = useQuery({
     queryKey: ["drives"],
     queryFn: () => apiFetch<Paginated<Drive>>("/drives?limit=30")
   });
+  const drives = drivesQuery.data?.items ?? [];
+  const eligibilityQueries = useQueries({
+    queries: drives.map((drive) => ({
+      queryKey: ["drive-eligibility", drive.id],
+      queryFn: () => apiFetch<Eligibility>(`/drives/${drive.id}/eligibility`)
+    }))
+  });
+  const eligibilityByDrive = drives.reduce<Record<string, Eligibility | undefined>>((acc, drive, index) => {
+    acc[drive.id] = eligibilityQueries[index]?.data;
+    return acc;
+  }, {});
+  const filteredDrives = drives
+    .filter((drive) => {
+      const query = search.trim().toLowerCase();
+      const matchesSearch = !query || [drive.company.name, drive.role, drive.location].some((value) => value.toLowerCase().includes(query));
+      const matchesJobType = jobType === "all" || drive.jobType === jobType;
+      const matchesStatus = status === "all" || drive.status === status;
+      const matchesEligibility = eligibility === "all" || eligibilityByDrive[drive.id]?.status === eligibility;
+      return matchesSearch && matchesJobType && matchesStatus && matchesEligibility;
+    })
+    .sort((a, b) => {
+      if (sortBy === "deadline-desc") return new Date(b.applicationDeadline).getTime() - new Date(a.applicationDeadline).getTime();
+      if (sortBy === "ctc-desc") return (b.ctc ?? 0) - (a.ctc ?? 0);
+      return new Date(a.applicationDeadline).getTime() - new Date(b.applicationDeadline).getTime();
+    });
+
+  if (drivesQuery.isLoading) return <LoadingSkeleton rows={5} />;
 
   return (
     <div className="grid gap-6">
-      <div>
-        <h2 className="text-3xl font-semibold tracking-tight">Company drives</h2>
-        <p className="text-muted-foreground">Review eligibility and apply to open drives.</p>
-      </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        {(drivesQuery.data?.items ?? []).map((drive) => <DriveCard key={drive.id} drive={drive} />)}
-      </div>
+      <PageHeader
+        eyebrow="Company drives"
+        title="Explore open placement drives"
+        description="Review eligibility, deadlines, required skills, and application fit before applying."
+      />
+      <Card className="soft-shadow">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base"><SlidersHorizontal className="h-4 w-4" /> Filters</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-[1.4fr_repeat(4,1fr)]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by company, role, or location" className="pl-9" />
+          </div>
+          <Select value={jobType} onValueChange={setJobType}>
+            <SelectTrigger><SelectValue placeholder="Job type" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All job types</SelectItem>
+              <SelectItem value="INTERNSHIP">Internship</SelectItem>
+              <SelectItem value="FULL_TIME">Full-time</SelectItem>
+              <SelectItem value="INTERNSHIP_PPO">Internship + PPO</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={eligibility} onValueChange={setEligibility}>
+            <SelectTrigger><SelectValue placeholder="Eligibility" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All eligibility</SelectItem>
+              <SelectItem value="ELIGIBLE">Eligible</SelectItem>
+              <SelectItem value="PARTIALLY_READY">Partially Ready</SelectItem>
+              <SelectItem value="NOT_ELIGIBLE">Not Eligible</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="DRAFT">Draft</SelectItem>
+              <SelectItem value="OPEN">Open</SelectItem>
+              <SelectItem value="CLOSED">Closed</SelectItem>
+              <SelectItem value="COMPLETED">Completed</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger><SelectValue placeholder="Sort" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="deadline-asc">Deadline soonest</SelectItem>
+              <SelectItem value="deadline-desc">Deadline latest</SelectItem>
+              <SelectItem value="ctc-desc">Highest CTC</SelectItem>
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
+      {filteredDrives.length ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {filteredDrives.map((drive) => <DriveCard key={drive.id} drive={drive} eligibility={eligibilityByDrive[drive.id]} />)}
+        </div>
+      ) : (
+        <EmptyState
+          icon={BriefcaseBusiness}
+          title="No drives available right now"
+          message="Try adjusting filters, or check back when your TPO publishes new company drives."
+        />
+      )}
     </div>
   );
 }
@@ -531,62 +773,113 @@ export function StudentApplicationsPage() {
   });
   const applications = applicationsQuery.data ?? [];
 
+  if (applicationsQuery.isLoading) return <LoadingSkeleton rows={4} />;
+
   return (
     <div className="grid gap-6">
-      <div>
-        <h2 className="text-3xl font-semibold tracking-tight">My applications</h2>
-        <p className="text-muted-foreground">Track every drive from applied to selected or rejected.</p>
-      </div>
-      <ApplicationKanban applications={applications} />
+      <PageHeader
+        eyebrow="Application tracker"
+        title="My applications"
+        description="Track every drive from saved and applied through interview, selection, or rejection."
+        actions={
+          <Button asChild>
+            <Link href="/student/drives">Explore drives <ArrowRight className="ml-2 h-4 w-4" /></Link>
+          </Button>
+        }
+      />
+      {applications.length ? (
+        <ApplicationKanban applications={applications} />
+      ) : (
+        <EmptyState
+          icon={ListChecks}
+          title="No applications yet"
+          message="Start applying to open drives and track your placement journey here."
+          action={<Button asChild><Link href="/student/drives">Explore Drives</Link></Button>}
+        />
+      )}
     </div>
   );
 }
 
 export function StudentReadinessPage() {
   const readinessQuery = useReadiness();
+  const profileQuery = useStudentProfile();
   const readiness = readinessQuery.data;
+  const profile = profileQuery.data;
+  const checklist = [
+    { label: "Core profile details", done: profileCompletion(profile) >= 80 },
+    { label: "Resume uploaded", done: Boolean(profile?.resumeUrl) },
+    { label: "At least three skills", done: (profile?.skills?.length ?? 0) >= 3 },
+    { label: "Project proof added", done: (profile?.projects?.length ?? 0) > 0 },
+    { label: "Coding profiles linked", done: [profile?.githubUsername, profile?.leetcodeUsername, profile?.hackerrankUsername].filter(Boolean).length > 0 }
+  ];
+
+  if (readinessQuery.isLoading) return <LoadingSkeleton rows={5} />;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-      <Card>
-        <CardHeader>
-          <CardTitle>Readiness report</CardTitle>
-          <CardDescription>Updated from your latest profile.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ReadinessRing score={readiness?.score ?? 0} level={readiness?.level ?? "Not Ready"} />
-        </CardContent>
-      </Card>
-      <div className="grid gap-6">
-        <Card>
+    <div className="grid gap-6">
+      <PageHeader
+        eyebrow="Readiness report"
+        title="Placement Readiness Score"
+        description="A clear view of your current placement readiness level, score breakdown, and next actions."
+      />
+      <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
+        <Card className="soft-shadow">
           <CardHeader>
-            <CardTitle>Score breakdown</CardTitle>
+            <CardTitle>Overall score</CardTitle>
+            <CardDescription>Updated from your latest profile.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4">
-            {Object.entries(readiness?.breakdown ?? {}).map(([key, value]) => (
-              <div key={key} className="grid gap-2">
-                <div className="flex justify-between text-sm">
-                  <span>{toTitle(key)}</span>
-                  <span className="font-medium">{value}</span>
+          <CardContent>
+            <ReadinessRing score={readiness?.score ?? 0} level={readiness?.level ?? "Not Ready"} />
+          </CardContent>
+        </Card>
+        <div className="grid gap-6">
+          <Card className="soft-shadow">
+            <CardHeader>
+              <CardTitle>Score breakdown</CardTitle>
+              <CardDescription>Color-coded progress by readiness area.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2">
+              {Object.entries(readiness?.breakdown ?? {}).map(([key, value]) => (
+                <div key={key} className="rounded-xl border bg-background/60 p-4">
+                  <div className="mb-2 flex justify-between text-sm">
+                    <span className="font-medium">{toTitle(key)}</span>
+                    <span className="font-semibold">{value}/100</span>
+                  </div>
+                  <Progress value={value} />
                 </div>
-                <Progress value={value} />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Improvement suggestions</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            {(readiness?.suggestions ?? []).map((suggestion) => (
-              <div key={suggestion} className="flex items-start gap-3 rounded-md border p-3 text-sm">
-                <BadgeCheck className="mt-0.5 h-4 w-4 text-primary" />
-                {suggestion}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+              ))}
+            </CardContent>
+          </Card>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card className="soft-shadow">
+              <CardHeader>
+                <CardTitle>Profile completion checklist</CardTitle>
+                <CardDescription>Complete these items to strengthen your readiness profile.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3">
+                {checklist.map((item) => (
+                  <div key={item.label} className="flex items-center justify-between gap-3 rounded-xl border bg-muted/25 p-3 text-sm">
+                    <div className="flex items-center gap-3">
+                      {item.done ? <CheckCircle2 className="h-4 w-4 text-primary" /> : <BadgeCheck className="h-4 w-4 text-muted-foreground" />}
+                      <span>{item.label}</span>
+                    </div>
+                    <StatusBadge status={item.done ? "COMPLETED" : "NOT_STARTED"} label={item.done ? "Done" : "Pending"} />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+            <Card className="soft-shadow">
+              <CardHeader>
+                <CardTitle>Improvement suggestions</CardTitle>
+                <CardDescription>Personalized next steps from the Stage 1 scoring model.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <SuggestionList suggestions={readiness?.suggestions ?? []} />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   );

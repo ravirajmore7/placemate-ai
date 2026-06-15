@@ -12,33 +12,57 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+import { BarChart3 } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
 
-const COLORS = ["#14b8a6", "#22c55e", "#f59e0b", "#ef4444", "#6366f1", "#06b6d4"];
+const COLORS = [
+  "hsl(var(--chart-1))",
+  "hsl(var(--chart-2))",
+  "hsl(var(--chart-3))",
+  "hsl(var(--chart-4))",
+  "hsl(var(--chart-5))"
+];
+
+const tooltipStyle = {
+  border: "1px solid hsl(var(--border))",
+  borderRadius: "10px",
+  background: "hsl(var(--popover) / 0.96)",
+  color: "hsl(var(--popover-foreground))",
+  boxShadow: "0 18px 44px hsl(222 47% 7% / 0.14)"
+};
 
 export function SimpleBarChart({ data, xKey, yKey }: { data: Array<Record<string, string | number>>; xKey: string; yKey: string }) {
+  if (!data.length) {
+    return <EmptyState icon={BarChart3} title="No chart data yet" message="Analytics will appear here as placement activity is recorded." />;
+  }
+
   return (
     <ResponsiveContainer width="100%" height={260}>
       <BarChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-        <XAxis dataKey={xKey} tickLine={false} axisLine={false} fontSize={12} />
-        <YAxis tickLine={false} axisLine={false} fontSize={12} />
-        <Tooltip cursor={{ fill: "hsl(var(--muted))" }} />
-        <Bar dataKey={yKey} radius={[6, 6, 0, 0]} fill="hsl(var(--primary))" />
+        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+        <XAxis dataKey={xKey} tickLine={false} axisLine={false} fontSize={12} tick={{ fill: "hsl(var(--muted-foreground))" }} />
+        <YAxis tickLine={false} axisLine={false} fontSize={12} tick={{ fill: "hsl(var(--muted-foreground))" }} />
+        <Tooltip cursor={{ fill: "hsl(var(--muted) / 0.45)" }} contentStyle={tooltipStyle} />
+        <Bar dataKey={yKey} radius={[8, 8, 2, 2]} fill="hsl(var(--chart-1))" />
       </BarChart>
     </ResponsiveContainer>
   );
 }
 
 export function SimplePieChart({ data, nameKey, valueKey }: { data: Array<Record<string, string | number>>; nameKey: string; valueKey: string }) {
+  if (!data.length) {
+    return <EmptyState icon={BarChart3} title="No chart data yet" message="This breakdown will populate once records are available." />;
+  }
+
   return (
     <ResponsiveContainer width="100%" height={260}>
       <PieChart>
-        <Pie data={data} dataKey={valueKey} nameKey={nameKey} innerRadius={54} outerRadius={86} paddingAngle={4}>
+        <Pie data={data} dataKey={valueKey} nameKey={nameKey} innerRadius={58} outerRadius={88} paddingAngle={4}>
           {data.map((_, index) => (
             <Cell key={index} fill={COLORS[index % COLORS.length]} />
           ))}
         </Pie>
-        <Tooltip />
+        <Tooltip contentStyle={tooltipStyle} />
       </PieChart>
     </ResponsiveContainer>
   );
