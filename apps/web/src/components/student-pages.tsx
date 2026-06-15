@@ -20,11 +20,13 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
+  Sparkles,
+  Target,
   UploadCloud,
   UserRound
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import type { Application, Drive, Paginated, Readiness, StudentProfile } from "@/lib/types";
+import type { Application, Drive, JobMatchResult, Paginated, Readiness, SkillProofScore, StudentProfile } from "@/lib/types";
 import { formatCurrency, formatDate, toTitle } from "@/lib/utils";
 import { ApplicationKanban } from "@/components/kanban";
 import { EmptyState } from "@/components/empty-state";
@@ -130,6 +132,10 @@ export function StudentDashboardPage() {
     queryKey: ["student-applications"],
     queryFn: () => apiFetch<Application[]>("/applications/me")
   });
+  const skillProofQuery = useQuery({
+    queryKey: ["skillproof"],
+    queryFn: () => apiFetch<SkillProofScore>("/skillproof/me")
+  });
 
   const profile = profileQuery.data;
   const readiness = readinessQuery.data;
@@ -163,6 +169,9 @@ export function StudentDashboardPage() {
             <Button variant="outline" asChild>
               <Link href="/student/profile">Update profile</Link>
             </Button>
+            <Button variant="outline" asChild>
+              <Link href="/student/skillproof">SkillProof AI</Link>
+            </Button>
             <Button asChild>
               <Link href="/student/drives">Explore drives <ArrowRight className="ml-2 h-4 w-4" /></Link>
             </Button>
@@ -180,6 +189,7 @@ export function StudentDashboardPage() {
           </CardContent>
         </Card>
         <div className="grid gap-4 md:grid-cols-2 xl:col-span-3 xl:grid-cols-3">
+          <StatCard title="SkillProof Score" value={skillProofQuery.data?.overallScore ?? 0} helper={skillProofQuery.data?.level ?? "Stage 2"} icon={Sparkles} />
           <StatCard title="Profile Completion" value={`${completion}%`} helper="Academic and career fields" icon={UserRound} />
           <StatCard title="Active Applications" value={activeApps} helper="In progress" icon={ListChecks} />
           <StatCard title="Upcoming Deadlines" value={applications.length} helper="Saved and applied drives" icon={CalendarClock} />
@@ -601,7 +611,7 @@ export function CodingProfilesPage() {
   );
 }
 
-function DriveCard({ drive, eligibility }: { drive: Drive; eligibility?: Eligibility }) {
+function DriveCard({ drive, eligibility, match }: { drive: Drive; eligibility?: Eligibility; match?: JobMatchResult }) {
   const queryClient = useQueryClient();
   const applyMutation = useMutation({
     mutationFn: () => apiFetch<Application>("/applications", { method: "POST", body: { driveId: drive.id } }),
@@ -648,6 +658,24 @@ function DriveCard({ drive, eligibility }: { drive: Drive; eligibility?: Eligibi
           </div>
           <p className="leading-6 text-muted-foreground">{eligibility?.reason ?? "Checking your profile against this drive."}</p>
         </div>
+        <div className="rounded-xl border bg-muted/25 p-3 text-sm">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2 font-medium"><Target className="h-4 w-4 text-primary" /> Company fit</span>
+            <span className="font-semibold">{match?.matchScore ?? 0}%</span>
+          </div>
+          <Progress value={match?.matchScore ?? 0} />
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(match?.missingSkillsJson ?? []).slice(0, 3).map((skill) => <Badge key={skill} variant="warning">Missing {skill}</Badge>)}
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" className="flex-1" asChild>
+            <Link href="/student/company-fit">View fit</Link>
+          </Button>
+          <Button variant="outline" className="flex-1" asChild>
+            <Link href={`/student/roadmap?driveId=${drive.id}`}>Roadmap</Link>
+          </Button>
+        </div>
         <Button
           disabled={applyMutation.isPending || eligibility?.status === "NOT_ELIGIBLE"}
           onClick={() => applyMutation.mutate()}
@@ -678,6 +706,16 @@ export function StudentDrivesPage() {
   });
   const eligibilityByDrive = drives.reduce<Record<string, Eligibility | undefined>>((acc, drive, index) => {
     acc[drive.id] = eligibilityQueries[index]?.data;
+    return acc;
+  }, {});
+  const matchQueries = useQueries({
+    queries: drives.map((drive) => ({
+      queryKey: ["drive-match", drive.id],
+      queryFn: () => apiFetch<JobMatchResult>(`/matches/drive/${drive.id}/me`)
+    }))
+  });
+  const matchByDrive = drives.reduce<Record<string, JobMatchResult | undefined>>((acc, drive, index) => {
+    acc[drive.id] = matchQueries[index]?.data;
     return acc;
   }, {});
   const filteredDrives = drives
@@ -753,7 +791,7 @@ export function StudentDrivesPage() {
       </Card>
       {filteredDrives.length ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          {filteredDrives.map((drive) => <DriveCard key={drive.id} drive={drive} eligibility={eligibilityByDrive[drive.id]} />)}
+          {filteredDrives.map((drive) => <DriveCard key={drive.id} drive={drive} eligibility={eligibilityByDrive[drive.id]} match={matchByDrive[drive.id]} />)}
         </div>
       ) : (
         <EmptyState

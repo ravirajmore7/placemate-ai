@@ -109,6 +109,15 @@ model StudentProfile {
   applications            Application[]
   readinessScoreHistories ReadinessScoreHistory[]
   codingProfileSnapshots  CodingProfileSnapshot[]
+  githubProfile           GitHubProfile?
+  leetcodeProfile         LeetCodeProfile?
+  hackerRankProfile       HackerRankProfile?
+  resumeAnalyses          ResumeAnalysis[]
+  skillProofScores        SkillProofScore[]
+  skillVerifications      SkillVerification[]
+  jobMatchResults         JobMatchResult[]
+  skillGaps               SkillGap[]
+  roadmaps                StudentRoadmap[]
 
   @@index([branch])
   @@index([cgpa])
@@ -190,6 +199,10 @@ model Drive {
   company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   createdBy    User          @relation("DriveCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   applications Application[]
+  jobDescriptionAnalysis JobDescriptionAnalysis?
+  jobMatchResults        JobMatchResult[]
+  skillGaps              SkillGap[]
+  roadmaps               StudentRoadmap[]
 
   @@index([status])
   @@index([applicationDeadline])
@@ -263,4 +276,287 @@ model AuditLog {
 
   @@index([entityType])
   @@index([action])
+}
+
+model GitHubProfile {
+  id               String   @id @default(cuid())
+  studentProfileId String   @unique
+  username         String
+  name             String?
+  bio              String?
+  avatarUrl        String?
+  profileUrl       String?
+  publicRepos      Int      @default(0)
+  followers        Int      @default(0)
+  following        Int      @default(0)
+  githubScore      Int      @default(0)
+  strengthsJson    Json?
+  weaknessesJson   Json?
+  suggestionsJson  Json?
+  rawDataJson      Json?
+  lastSyncedAt     DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  studentProfile StudentProfile     @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  repositories   GitHubRepository[]
+
+  @@index([username])
+  @@index([githubScore])
+}
+
+model GitHubRepository {
+  id              String   @id @default(cuid())
+  githubProfileId String
+  name            String
+  description     String?
+  url             String?
+  primaryLanguage String?
+  languagesJson   Json?
+  stars           Int      @default(0)
+  forks           Int      @default(0)
+  openIssues      Int      @default(0)
+  hasReadme       Boolean  @default(false)
+  hasLiveDemo     Boolean  @default(false)
+  topicsJson      Json?
+  lastUpdatedAt   DateTime?
+  qualityScore    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  githubProfile GitHubProfile @relation(fields: [githubProfileId], references: [id], onDelete: Cascade)
+
+  @@index([githubProfileId])
+  @@index([primaryLanguage])
+  @@index([qualityScore])
+}
+
+model LeetCodeProfile {
+  id              String   @id @default(cuid())
+  studentProfileId String  @unique
+  username        String
+  profileUrl      String?
+  totalSolved     Int      @default(0)
+  easySolved      Int      @default(0)
+  mediumSolved    Int      @default(0)
+  hardSolved      Int      @default(0)
+  ranking         Int?
+  contestRating   Float?
+  acceptanceRate  Float?
+  badgesJson      Json?
+  topicStatsJson  Json?
+  leetcodeScore   Int      @default(0)
+  strengthsJson   Json?
+  weaknessesJson  Json?
+  suggestionsJson Json?
+  rawDataJson     Json?
+  lastSyncedAt    DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+
+  @@index([username])
+  @@index([leetcodeScore])
+}
+
+model HackerRankProfile {
+  id                  String   @id @default(cuid())
+  studentProfileId    String   @unique
+  username            String
+  profileUrl          String?
+  problemSolvingScore Int      @default(0)
+  pythonScore         Int      @default(0)
+  javaScore           Int      @default(0)
+  sqlScore            Int      @default(0)
+  certificationsJson  Json?
+  testScoresJson      Json?
+  hackerRankScore     Int      @default(0)
+  strengthsJson       Json?
+  weaknessesJson      Json?
+  suggestionsJson     Json?
+  rawDataJson         Json?
+  lastSyncedAt        DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+
+  @@index([username])
+  @@index([hackerRankScore])
+}
+
+model ResumeAnalysis {
+  id                  String   @id @default(cuid())
+  studentProfileId    String
+  resumeUrl           String?
+  extractedText       String?
+  detectedSkillsJson  Json?
+  missingSectionsJson Json?
+  weakPointsJson      Json?
+  suggestionsJson     Json?
+  atsScore            Int      @default(0)
+  resumeScore         Int      @default(0)
+  contactScore        Int      @default(0)
+  educationScore      Int      @default(0)
+  skillsScore         Int      @default(0)
+  projectsScore       Int      @default(0)
+  experienceScore     Int      @default(0)
+  formattingScore     Int      @default(0)
+  impactScore         Int      @default(0)
+  linksScore          Int      @default(0)
+  analyzedAt          DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+
+  @@index([studentProfileId])
+  @@index([resumeScore])
+  @@index([analyzedAt])
+}
+
+model JobDescriptionAnalysis {
+  id                  String   @id @default(cuid())
+  driveId             String   @unique
+  extractedSkillsJson Json?
+  requiredSkillsJson  Json?
+  preferredSkillsJson Json?
+  roleCategory        String?
+  difficultyLevel     String?
+  keywordsJson        Json?
+  analysisJson        Json?
+  analyzedAt          DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  drive Drive @relation(fields: [driveId], references: [id], onDelete: Cascade)
+
+  @@index([difficultyLevel])
+  @@index([roleCategory])
+}
+
+model SkillProofScore {
+  id                       String   @id @default(cuid())
+  studentProfileId         String
+  overallScore             Int      @default(0)
+  level                    String
+  placementReadinessScore  Int      @default(0)
+  resumeScore              Int      @default(0)
+  githubScore              Int      @default(0)
+  leetcodeScore            Int      @default(0)
+  hackerRankScore          Int      @default(0)
+  projectScore             Int      @default(0)
+  skillVerificationScore   Int      @default(0)
+  breakdownJson            Json?
+  suggestionsJson          Json?
+  calculatedAt             DateTime @default(now())
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+
+  @@index([studentProfileId])
+  @@index([overallScore])
+  @@index([calculatedAt])
+}
+
+model SkillVerification {
+  id               String   @id @default(cuid())
+  studentProfileId String
+  skillName        String
+  proofLevel       String
+  sourcesJson      Json?
+  confidenceScore  Int      @default(0)
+  suggestion       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([studentProfileId, skillName])
+  @@index([proofLevel])
+}
+
+model JobMatchResult {
+  id                    String   @id @default(cuid())
+  studentProfileId      String
+  driveId               String
+  matchScore            Int      @default(0)
+  matchedSkillsJson     Json?
+  missingSkillsJson     Json?
+  weakSkillsJson        Json?
+  strongProofSkillsJson Json?
+  reasonsJson           Json?
+  suggestionsJson       Json?
+  calculatedAt          DateTime @default(now())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  drive          Drive          @relation(fields: [driveId], references: [id], onDelete: Cascade)
+
+  @@unique([studentProfileId, driveId])
+  @@index([driveId])
+  @@index([matchScore])
+}
+
+model SkillGap {
+  id               String   @id @default(cuid())
+  studentProfileId String
+  driveId          String
+  skillName        String
+  gapType          String
+  priority         String
+  recommendation   String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  drive          Drive          @relation(fields: [driveId], references: [id], onDelete: Cascade)
+
+  @@index([studentProfileId])
+  @@index([driveId])
+  @@index([skillName])
+  @@index([priority])
+}
+
+model StudentRoadmap {
+  id               String   @id @default(cuid())
+  studentProfileId String
+  driveId          String?
+  title            String
+  durationDays     Int
+  goal             String
+  roadmapJson      Json?
+  status           String   @default("ACTIVE")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  drive          Drive?         @relation(fields: [driveId], references: [id], onDelete: SetNull)
+  tasks          RoadmapTask[]
+
+  @@index([studentProfileId])
+  @@index([driveId])
+  @@index([status])
+}
+
+model RoadmapTask {
+  id          String   @id @default(cuid())
+  roadmapId   String
+  title       String
+  description String?
+  category    String
+  priority    String
+  dueDate     DateTime?
+  completed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  roadmap StudentRoadmap @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+
+  @@index([roadmapId])
+  @@index([completed])
+  @@index([category])
 }

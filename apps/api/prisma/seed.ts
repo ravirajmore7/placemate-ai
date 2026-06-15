@@ -1,6 +1,18 @@
 import { PrismaClient, Role } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import { checkEligibility } from "../src/drives/eligibility";
+import {
+  analyzeJobDescriptionText,
+  calculateSkillProof,
+  clampScore,
+  normalizeSkill,
+  proofLevel,
+  scoreGitHub,
+  scoreHackerRank,
+  scoreLeetCode,
+  scoreProjectQuality,
+  uniqueStrings
+} from "../src/stage2/stage2.scoring";
 import { calculateReadiness, readinessJson } from "../src/students/readiness";
 
 const prisma = new PrismaClient();
@@ -22,6 +34,18 @@ const skillSets = [
 async function main() {
   await prisma.auditLog.deleteMany();
   await prisma.notification.deleteMany();
+  await prisma.roadmapTask.deleteMany();
+  await prisma.studentRoadmap.deleteMany();
+  await prisma.skillGap.deleteMany();
+  await prisma.jobMatchResult.deleteMany();
+  await prisma.skillVerification.deleteMany();
+  await prisma.skillProofScore.deleteMany();
+  await prisma.jobDescriptionAnalysis.deleteMany();
+  await prisma.resumeAnalysis.deleteMany();
+  await prisma.hackerRankProfile.deleteMany();
+  await prisma.leetCodeProfile.deleteMany();
+  await prisma.gitHubRepository.deleteMany();
+  await prisma.gitHubProfile.deleteMany();
   await prisma.application.deleteMany();
   await prisma.codingProfileSnapshot.deleteMany();
   await prisma.readinessScoreHistory.deleteMany();
@@ -189,6 +213,218 @@ async function main() {
       }
     }
 
+    const stage2GithubUsername = hydrated.githubUsername ?? `${name.split(" ")[0].toLowerCase()}builds`;
+    const githubRepositories = [
+      {
+        name: `${stage2GithubUsername}-placement-os`,
+        description: "Full-stack placement intelligence dashboard with student proof, company drives, and analytics.",
+        url: `https://github.com/demo/${stage2GithubUsername}-placement-os`,
+        primaryLanguage: index % 2 === 0 ? "TypeScript" : "Java",
+        languages: index % 2 === 0 ? ["TypeScript", "React", "PostgreSQL"] : ["Java", "Spring Boot", "SQL"],
+        stars: index + 1,
+        forks: Math.floor(index / 2),
+        openIssues: index % 3,
+        hasReadme: index !== 4,
+        hasLiveDemo: index % 3 !== 1,
+        topics: ["placement", "dashboard", "skillproof"],
+        lastUpdatedAt: new Date(`2026-0${(index % 5) + 1}-12`)
+      },
+      {
+        name: `${stage2GithubUsername}-dsa-lab`,
+        description: "DSA practice repository with patterns for arrays, graphs, trees, and dynamic programming.",
+        url: `https://github.com/demo/${stage2GithubUsername}-dsa-lab`,
+        primaryLanguage: index % 2 === 0 ? "Python" : "C++",
+        languages: index % 2 === 0 ? ["Python"] : ["C++"],
+        stars: index % 4,
+        forks: index % 2,
+        openIssues: 0,
+        hasReadme: index % 5 !== 0,
+        hasLiveDemo: false,
+        topics: ["dsa", "leetcode", "interview"],
+        lastUpdatedAt: new Date(`2026-0${(index % 4) + 2}-08`)
+      }
+    ];
+    const githubScore = scoreGitHub(githubRepositories, {
+      publicRepos: githubRepositories.length + index,
+      followers: 2 + index,
+      following: 8 + index
+    });
+
+    await prisma.studentProfile.update({
+      where: { id: profile.id },
+      data: {
+        githubUsername: stage2GithubUsername,
+        leetcodeUsername: hydrated.leetcodeUsername ?? `${name.split(" ")[0].toLowerCase()}codes`,
+        hackerrankUsername: hydrated.hackerrankUsername ?? `${name.split(" ")[0].toLowerCase()}hr`
+      }
+    });
+
+    await prisma.gitHubProfile.create({
+      data: {
+        studentProfileId: profile.id,
+        username: stage2GithubUsername,
+        name,
+        bio: `${hydrated.targetRole ?? "Software Engineer"} aspirant building verified project proof.`,
+        avatarUrl: `https://api.dicebear.com/8.x/initials/svg?seed=${encodeURIComponent(name)}`,
+        profileUrl: `https://github.com/${stage2GithubUsername}`,
+        publicRepos: githubRepositories.length + index,
+        followers: 2 + index,
+        following: 8 + index,
+        githubScore: githubScore.score,
+        strengthsJson: githubScore.strengths,
+        weaknessesJson: githubScore.weaknesses,
+        suggestionsJson: githubScore.suggestions,
+        rawDataJson: { source: "seed", stage: 2 },
+        lastSyncedAt: new Date(),
+        repositories: {
+          create: githubRepositories.map((repository) => ({
+            name: repository.name,
+            description: repository.description,
+            url: repository.url,
+            primaryLanguage: repository.primaryLanguage,
+            languagesJson: repository.languages,
+            stars: repository.stars,
+            forks: repository.forks,
+            openIssues: repository.openIssues,
+            hasReadme: repository.hasReadme,
+            hasLiveDemo: repository.hasLiveDemo,
+            topicsJson: repository.topics,
+            lastUpdatedAt: repository.lastUpdatedAt,
+            qualityScore: Math.min(100, 30 + repository.languages.length * 8 + (repository.hasReadme ? 20 : 0) + (repository.hasLiveDemo ? 15 : 0) + repository.stars)
+          }))
+        }
+      }
+    });
+
+    const leetcodeStats = {
+      totalSolved: 80 + index * 18,
+      easySolved: 38 + index * 7,
+      mediumSolved: 32 + index * 9,
+      hardSolved: Math.max(0, index - 2),
+      contestRating: 1250 + index * 45,
+      topicStats: { Arrays: 30 + index, Trees: 16 + index, Graphs: 8 + index, DP: 5 + index }
+    };
+    const leetcodeScore = scoreLeetCode(leetcodeStats);
+    await prisma.leetCodeProfile.create({
+      data: {
+        studentProfileId: profile.id,
+        username: hydrated.leetcodeUsername ?? `${name.split(" ")[0].toLowerCase()}codes`,
+        profileUrl: `https://leetcode.com/${hydrated.leetcodeUsername ?? `${name.split(" ")[0].toLowerCase()}codes`}/`,
+        totalSolved: leetcodeStats.totalSolved,
+        easySolved: leetcodeStats.easySolved,
+        mediumSolved: leetcodeStats.mediumSolved,
+        hardSolved: leetcodeStats.hardSolved,
+        ranking: 180000 - index * 12000,
+        contestRating: leetcodeStats.contestRating,
+        acceptanceRate: 47 + index * 2,
+        badgesJson: index > 5 ? ["100 Days Badge", "Contest Participant"] : ["50 Days Badge"],
+        topicStatsJson: leetcodeStats.topicStats,
+        leetcodeScore: leetcodeScore.score,
+        strengthsJson: leetcodeScore.strengths,
+        weaknessesJson: leetcodeScore.weaknesses,
+        suggestionsJson: leetcodeScore.suggestions,
+        rawDataJson: { source: "seed", stage: 2 },
+        lastSyncedAt: new Date()
+      }
+    });
+
+    const hackerRankStats = {
+      problemSolvingScore: Math.min(100, 45 + index * 6),
+      pythonScore: Math.min(100, 52 + index * 5),
+      javaScore: Math.min(100, 48 + index * 4),
+      sqlScore: Math.min(100, 55 + index * 5),
+      certifications: index % 3 === 0 ? ["SQL Basic", "Python Basic"] : index % 2 === 0 ? ["SQL Basic"] : [],
+      testScores: [{ name: "Campus coding test", score: Math.min(100, 58 + index * 4) }]
+    };
+    const hackerRankScore = scoreHackerRank(hackerRankStats);
+    await prisma.hackerRankProfile.create({
+      data: {
+        studentProfileId: profile.id,
+        username: hydrated.hackerrankUsername ?? `${name.split(" ")[0].toLowerCase()}hr`,
+        profileUrl: `https://www.hackerrank.com/${hydrated.hackerrankUsername ?? `${name.split(" ")[0].toLowerCase()}hr`}`,
+        problemSolvingScore: hackerRankStats.problemSolvingScore,
+        pythonScore: hackerRankStats.pythonScore,
+        javaScore: hackerRankStats.javaScore,
+        sqlScore: hackerRankStats.sqlScore,
+        certificationsJson: hackerRankStats.certifications,
+        testScoresJson: hackerRankStats.testScores,
+        hackerRankScore: hackerRankScore.score,
+        strengthsJson: hackerRankScore.strengths,
+        weaknessesJson: hackerRankScore.weaknesses,
+        suggestionsJson: hackerRankScore.suggestions,
+        rawDataJson: { source: "seed", stage: 2 },
+        lastSyncedAt: new Date()
+      }
+    });
+
+    const detectedSkills = uniqueStrings([...skillSets[index], ...hydrated.projects.flatMap((project) => project.techStack)]);
+    const resumeScore = Math.min(95, 56 + index * 4 + (index % 2 === 0 ? 8 : 0));
+    await prisma.resumeAnalysis.create({
+      data: {
+        studentProfileId: profile.id,
+        resumeUrl: hydrated.resumeUrl ?? `/uploads/${name.toLowerCase().replace(/\s/g, "-")}.pdf`,
+        extractedText: `${name}\n${user.email}\nEducation B.Tech ${branch}\nSkills ${detectedSkills.join(", ")}\nProjects ${hydrated.projects.map((project) => project.title).join(", ")}`,
+        detectedSkillsJson: detectedSkills,
+        missingSectionsJson: index % 4 === 0 ? ["Achievements", "Live project links"] : [],
+        weakPointsJson: index % 3 === 0 ? ["Project bullets need quantified impact"] : [],
+        suggestionsJson: ["Add measurable project impact", "Keep GitHub and resume skills aligned", "Add live demo links for strongest projects"],
+        atsScore: Math.min(96, resumeScore + 5),
+        resumeScore,
+        contactScore: 10,
+        educationScore: 10,
+        skillsScore: Math.min(15, detectedSkills.length * 3),
+        projectsScore: index % 2 === 0 ? 18 : 14,
+        experienceScore: index > 4 ? 9 : 5,
+        formattingScore: 8,
+        impactScore: index % 3 === 0 ? 4 : 8,
+        linksScore: index % 2 === 0 ? 5 : 3
+      }
+    });
+
+    const verificationRows = detectedSkills.map((skill) => {
+      const normalized = normalizeSkill(skill);
+      const hasGithub = githubRepositories.some((repository) => repository.languages.some((language) => normalizeSkill(language) === normalized));
+      const hasProject = hydrated.projects.some((project) => project.techStack.some((tech) => normalizeSkill(tech) === normalized));
+      const hasCoding = ["dsa", "data structures", "algorithms", "sql", "java", "python"].includes(normalized);
+      const confidenceScore = Math.min(100, 25 + (hasGithub ? 30 : 0) + (hasProject ? 30 : 0) + (hasCoding ? 15 : 0) - (index % 5 === 0 ? 15 : 0));
+      return {
+        studentProfileId: profile.id,
+        skillName: skill,
+        proofLevel: proofLevel(confidenceScore),
+        confidenceScore,
+        sourcesJson: { resume: true, github: hasGithub, project: hasProject, codingProfile: hasCoding },
+        suggestion: confidenceScore >= 80 ? "Strong proof from projects and public coding activity" : `Add stronger public proof for ${skill}`
+      };
+    });
+    await prisma.skillVerification.createMany({ data: verificationRows, skipDuplicates: true });
+
+    const skillVerificationScore = Math.round(verificationRows.reduce((sum, row) => sum + row.confidenceScore, 0) / verificationRows.length);
+    const skillProof = calculateSkillProof({
+      placementReadinessScore: readiness.score,
+      resumeScore,
+      githubScore: githubScore.score,
+      leetcodeScore: leetcodeScore.score,
+      hackerRankScore: hackerRankScore.score,
+      projectScore: scoreProjectQuality(hydrated.projects),
+      skillVerificationScore
+    });
+    await prisma.skillProofScore.create({
+      data: {
+        studentProfileId: profile.id,
+        overallScore: skillProof.overallScore,
+        level: skillProof.level,
+        placementReadinessScore: readiness.score,
+        resumeScore,
+        githubScore: githubScore.score,
+        leetcodeScore: leetcodeScore.score,
+        hackerRankScore: hackerRankScore.score,
+        projectScore: scoreProjectQuality(hydrated.projects),
+        skillVerificationScore,
+        breakdownJson: skillProof.breakdown,
+        suggestionsJson: skillProof.suggestions
+      }
+    });
+
     students.push(profile.id);
   }
 
@@ -295,6 +531,132 @@ async function main() {
       }
     })
   ]);
+
+  const companyNameById = Object.fromEntries(companies.map((company) => [company.id, company.name]));
+  for (const drive of drives) {
+    const jd = analyzeJobDescriptionText(`${companyNameById[drive.companyId]} ${drive.role}\n${drive.description}\nRequired skills: ${drive.requiredSkills.join(", ")}`, drive.requiredSkills);
+    await prisma.jobDescriptionAnalysis.create({
+      data: {
+        driveId: drive.id,
+        extractedSkillsJson: jd.extractedSkills,
+        requiredSkillsJson: jd.requiredSkills,
+        preferredSkillsJson: jd.preferredSkills,
+        roleCategory: jd.roleCategory,
+        difficultyLevel: jd.difficultyLevel,
+        keywordsJson: jd.keywords,
+        analysisJson: jd
+      }
+    });
+  }
+
+  const stage2Students = await prisma.studentProfile.findMany({
+    where: { id: { in: students } },
+    include: {
+      user: true,
+      skills: true,
+      projects: true,
+      resumeAnalyses: { orderBy: { analyzedAt: "desc" }, take: 1 },
+      leetcodeProfile: true,
+      hackerRankProfile: true,
+      skillVerifications: true
+    }
+  });
+
+  for (const [studentIndex, student] of stage2Students.entries()) {
+    const studentSkills = uniqueStrings([
+      ...student.skills.map((skill) => skill.name),
+      ...student.projects.flatMap((project) => project.techStack),
+      ...(Array.isArray(student.resumeAnalyses[0]?.detectedSkillsJson) ? student.resumeAnalyses[0].detectedSkillsJson.map(String) : [])
+    ]);
+    const studentSkillSet = new Set(studentSkills.map(normalizeSkill));
+
+    for (const drive of drives) {
+      const requiredSkills = uniqueStrings(drive.requiredSkills);
+      const matchedSkills = requiredSkills.filter((skill) => studentSkillSet.has(normalizeSkill(skill)));
+      const missingSkills = requiredSkills.filter((skill) => !studentSkillSet.has(normalizeSkill(skill)));
+      const weakSkills = student.skillVerifications
+        .filter((verification) => requiredSkills.some((skill) => normalizeSkill(skill) === normalizeSkill(verification.skillName)) && verification.confidenceScore < 60)
+        .map((verification) => verification.skillName);
+      const strongProofSkills = student.skillVerifications
+        .filter((verification) => requiredSkills.some((skill) => normalizeSkill(skill) === normalizeSkill(verification.skillName)) && verification.confidenceScore >= 75)
+        .map((verification) => verification.skillName);
+      const eligibility = checkEligibility(student, drive);
+      const matchScore = clampScore(
+        (requiredSkills.length ? (matchedSkills.length / requiredSkills.length) * 35 : 25) +
+          Math.min(20, student.projects.length * 8) +
+          (student.resumeAnalyses[0]?.atsScore ?? 0) * 0.15 +
+          (((student.leetcodeProfile?.leetcodeScore ?? 0) + (student.hackerRankProfile?.hackerRankScore ?? 0)) / 2) * 0.15 +
+          (eligibility.status === "ELIGIBLE" ? 10 : eligibility.status === "PARTIALLY_READY" ? 6 : 2) +
+          Math.min(5, strongProofSkills.length * 2)
+      );
+
+      await prisma.jobMatchResult.create({
+        data: {
+          studentProfileId: student.id,
+          driveId: drive.id,
+          matchScore,
+          matchedSkillsJson: matchedSkills,
+          missingSkillsJson: missingSkills,
+          weakSkillsJson: weakSkills,
+          strongProofSkillsJson: strongProofSkills,
+          reasonsJson: [`${matchedSkills.length}/${requiredSkills.length} required skills matched`, eligibility.reason],
+          suggestionsJson: missingSkills.length
+            ? missingSkills.map((skill) => `Build proof for ${skill}`)
+            : ["Maintain proof quality and prepare for interviews"]
+        }
+      });
+
+      await prisma.skillGap.createMany({
+        data: uniqueStrings([...missingSkills, ...weakSkills]).map((skill) => ({
+          studentProfileId: student.id,
+          driveId: drive.id,
+          skillName: skill,
+          gapType: missingSkills.some((missing) => normalizeSkill(missing) === normalizeSkill(skill)) ? "MISSING" : "WEAK",
+          priority: missingSkills.some((missing) => normalizeSkill(missing) === normalizeSkill(skill)) ? "HIGH" : "MEDIUM",
+          recommendation: `Complete focused practice and add proof for ${skill}`
+        }))
+      });
+    }
+
+    const targetDrive = drives[studentIndex % drives.length];
+    const targetCompany = companyNameById[targetDrive.companyId];
+    const roadmap = await prisma.studentRoadmap.create({
+      data: {
+        studentProfileId: student.id,
+        driveId: targetDrive.id,
+        title: `30-day roadmap for ${targetCompany} ${targetDrive.role}`,
+        durationDays: 30,
+        goal: `Close gaps and prepare for ${targetCompany} ${targetDrive.role}`,
+        roadmapJson: {
+          weeks: [
+            { week: 1, goal: "DSA basics and resume proof" },
+            { week: 2, goal: "Medium problems and GitHub documentation" },
+            { week: 3, goal: "Project polish and mock tests" },
+            { week: 4, goal: "Interview revision and final readiness" }
+          ]
+        }
+      }
+    });
+
+    await prisma.roadmapTask.createMany({
+      data: [
+        ["Solve 2 array or string problems", "DSA", "HIGH", 1],
+        ["Add README and screenshots to one GitHub project", "GitHub", "HIGH", 3],
+        ["Improve resume summary with measurable impact", "Resume", "MEDIUM", 5],
+        ["Practice one mock coding test", "Interview", "MEDIUM", 10],
+        ["Build one proof task for missing company skill", "Project", "HIGH", 14],
+        ["Revise DBMS and SQL interview questions", "SQL", "MEDIUM", 18],
+        ["Practice HR answer: Tell me about yourself", "Communication", "LOW", 22]
+      ].map(([title, category, priority, day]) => ({
+        roadmapId: roadmap.id,
+        title: String(title),
+        description: `Stage 2 demo task for ${targetCompany} readiness.`,
+        category: String(category),
+        priority: String(priority),
+        dueDate: new Date(Date.now() + Number(day) * 24 * 60 * 60 * 1000)
+      }))
+    });
+  }
 
   for (const [index, studentProfileId] of students.slice(0, 7).entries()) {
     const student = await prisma.studentProfile.findUniqueOrThrow({

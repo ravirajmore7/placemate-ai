@@ -16,6 +16,11 @@ export class TpoService {
       shortlistedStudents,
       selectedStudents,
       readinessAggregate,
+      skillProofAggregate,
+      strongGithubStudents,
+      strongLeetCodeStudents,
+      weakResumeStudents,
+      weakDsaStudents,
       branchWise,
       driveWise
     ] = await Promise.all([
@@ -26,6 +31,16 @@ export class TpoService {
       this.prisma.application.count({ where: { status: "SHORTLISTED" } }),
       this.prisma.application.count({ where: { status: "SELECTED" } }),
       this.prisma.studentProfile.aggregate({ _avg: { readinessScore: true } }),
+      this.prisma.skillProofScore.aggregate({ _avg: { overallScore: true } }),
+      this.prisma.gitHubProfile.count({ where: { githubScore: { gte: 75 } } }),
+      this.prisma.leetCodeProfile.count({ where: { leetcodeScore: { gte: 75 } } }),
+      this.prisma.resumeAnalysis.count({ where: { resumeScore: { lt: 60 } } }),
+      this.prisma.skillVerification.count({
+        where: {
+          skillName: { in: ["DSA", "Data Structures", "Algorithms", "Dynamic Programming", "Graphs"] },
+          confidenceScore: { lt: 60 }
+        }
+      }),
       this.prisma.studentProfile.groupBy({ by: ["branch"], _count: { branch: true } }),
       this.prisma.drive.findMany({
         include: { company: true, _count: { select: { applications: true } } },
@@ -42,7 +57,12 @@ export class TpoService {
         totalApplications,
         shortlistedStudents,
         selectedStudents,
-        averageReadinessScore: Math.round(readinessAggregate._avg.readinessScore ?? 0)
+        averageReadinessScore: Math.round(readinessAggregate._avg.readinessScore ?? 0),
+        averageSkillProofScore: Math.round(skillProofAggregate._avg.overallScore ?? 0),
+        strongGithubStudents,
+        strongLeetCodeStudents,
+        weakResumeStudents,
+        weakDsaStudents
       },
       charts: {
         branchWiseStudents: branchWise.map((item) => ({

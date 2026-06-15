@@ -10,13 +10,17 @@ import {
   BriefcaseBusiness,
   CalendarClock,
   CheckCircle2,
+  Code2,
+  FileText,
   Filter,
   Gauge,
+  Github,
   ListChecks,
   MapPin,
   Plus,
   Search,
   SlidersHorizontal,
+  Sparkles,
   Users
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
@@ -48,6 +52,11 @@ type TpoDashboard = {
     shortlistedStudents: number;
     selectedStudents: number;
     averageReadinessScore: number;
+    averageSkillProofScore: number;
+    strongGithubStudents: number;
+    strongLeetCodeStudents: number;
+    weakResumeStudents: number;
+    weakDsaStudents: number;
   };
   charts: {
     branchWiseStudents: Array<{ branch: string; students: number }>;
@@ -81,6 +90,13 @@ export function TpoDashboardPage() {
         <StatCard title="Applications" value={cards?.totalApplications ?? 0} icon={ListChecks} />
         <StatCard title="Shortlisted" value={cards?.shortlistedStudents ?? 0} icon={BadgeCheck} />
         <StatCard title="Selected" value={cards?.selectedStudents ?? 0} icon={CheckCircle2} />
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <StatCard title="Avg SkillProof" value={cards?.averageSkillProofScore ?? 0} helper="Stage 2 verified score" icon={Sparkles} />
+        <StatCard title="Strong GitHub" value={cards?.strongGithubStudents ?? 0} helper="Score 75+" icon={Github} />
+        <StatCard title="Strong LeetCode" value={cards?.strongLeetCodeStudents ?? 0} helper="Score 75+" icon={Code2} />
+        <StatCard title="Weak Resume" value={cards?.weakResumeStudents ?? 0} helper="Resume score below 60" icon={FileText} />
+        <StatCard title="Weak DSA" value={cards?.weakDsaStudents ?? 0} helper="Low proof signals" icon={Gauge} />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="soft-shadow">
