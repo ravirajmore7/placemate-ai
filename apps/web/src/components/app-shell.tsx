@@ -12,6 +12,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Code2,
+  CreditCard,
+  Eye,
   FileText,
   Gauge,
   Github,
@@ -19,14 +21,17 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
+  Mail,
   Medal,
   Menu,
   Network,
   Route,
   Search,
+  Settings,
   Shield,
   Sparkles,
   Target,
+  UserCog,
   Users
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -62,6 +67,10 @@ const navByRole: Record<Role, Array<{ href: string; label: string; icon: React.E
     { href: "/student/resume", label: "Resume", icon: FileText },
     { href: "/student/coding-profiles", label: "Coding Profiles", icon: Network },
     { href: "/student/drives", label: "Company Drives", icon: BriefcaseBusiness },
+    { href: "/student/recruiter-jobs", label: "Recruiter Jobs", icon: Search },
+    { href: "/student/recruiter-invites", label: "Recruiter Invites", icon: Mail },
+    { href: "/student/contact-requests", label: "Contact Requests", icon: Users },
+    { href: "/student/profile-visibility", label: "Profile Visibility", icon: Eye },
     { href: "/student/applications", label: "Applications", icon: ListChecks },
     { href: "/student/readiness", label: "Readiness", icon: Gauge }
   ],
@@ -81,12 +90,48 @@ const navByRole: Record<Role, Array<{ href: string; label: string; icon: React.E
   ],
   SUPER_ADMIN: [
     { href: "/admin/overview", label: "Overview", icon: Shield },
+    { href: "/admin/saas-dashboard", label: "SaaS Dashboard", icon: Sparkles },
+    { href: "/admin/organizations", label: "Organizations", icon: Building2 },
+    { href: "/admin/subscriptions", label: "Subscriptions", icon: CreditCard },
+    { href: "/admin/payments", label: "Payments", icon: CreditCard },
+    { href: "/admin/revenue", label: "Revenue", icon: BarChart3 },
+    { href: "/admin/account-logs", label: "Account Logs", icon: ListChecks },
     { href: "/admin/colleges", label: "Colleges", icon: Building2 },
     { href: "/admin/users", label: "Users", icon: Users },
     { href: "/admin/stats", label: "System Stats", icon: BarChart3 }
   ],
-  COLLEGE_ADMIN: [],
-  RECRUITER: []
+  COLLEGE_ADMIN: [
+    { href: "/college/settings", label: "College Settings", icon: Building2 },
+    { href: "/college/team", label: "Team", icon: UserCog },
+    { href: "/college/billing", label: "Billing", icon: CreditCard },
+    { href: "/college/subscription", label: "Subscription", icon: Sparkles }
+  ],
+  RECRUITER: [
+    { href: "/recruiter/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/recruiter/company-profile", label: "Company Profile", icon: Building2 },
+    { href: "/recruiter/jobs", label: "Jobs", icon: BriefcaseBusiness },
+    { href: "/recruiter/jobs/create", label: "Post a Job", icon: Sparkles },
+    { href: "/recruiter/candidates", label: "Candidates", icon: Search },
+    { href: "/recruiter/shortlists", label: "Shortlists", icon: ListChecks },
+    { href: "/recruiter/applications", label: "Applications", icon: Users },
+    { href: "/recruiter/interviews", label: "Interviews", icon: Target },
+    { href: "/recruiter/team", label: "Team", icon: UserCog },
+    { href: "/recruiter/billing", label: "Billing", icon: CreditCard },
+    { href: "/recruiter/settings", label: "Settings", icon: Settings }
+  ],
+  COMPANY_ADMIN: [
+    { href: "/recruiter/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/recruiter/company-profile", label: "Company Profile", icon: Building2 },
+    { href: "/recruiter/jobs", label: "Jobs", icon: BriefcaseBusiness },
+    { href: "/recruiter/jobs/create", label: "Post a Job", icon: Sparkles },
+    { href: "/recruiter/candidates", label: "Candidates", icon: Search },
+    { href: "/recruiter/shortlists", label: "Shortlists", icon: ListChecks },
+    { href: "/recruiter/applications", label: "Applications", icon: Users },
+    { href: "/recruiter/interviews", label: "Interviews", icon: Target },
+    { href: "/recruiter/team", label: "Team", icon: UserCog },
+    { href: "/recruiter/billing", label: "Billing", icon: CreditCard },
+    { href: "/recruiter/settings", label: "Settings", icon: Settings }
+  ]
 };
 
 const roleMeta: Record<Role, { label: string; badge: string }> = {
@@ -94,7 +139,8 @@ const roleMeta: Record<Role, { label: string; badge: string }> = {
   TPO_ADMIN: { label: "Placement Office", badge: "TPO" },
   SUPER_ADMIN: { label: "Platform Admin", badge: "Admin" },
   COLLEGE_ADMIN: { label: "College Admin", badge: "College" },
-  RECRUITER: { label: "Recruiter Portal", badge: "Recruiter" }
+  RECRUITER: { label: "Recruiter Portal", badge: "Recruiter" },
+  COMPANY_ADMIN: { label: "Company Admin", badge: "Company" }
 };
 
 function isActive(pathname: string, href: string) {
@@ -157,14 +203,23 @@ function SidebarNav({
   );
 }
 
-export function AppShell({ children, role }: { children: React.ReactNode; role: Role }) {
+function fallbackForRole(role: Role) {
+  if (role === "STUDENT") return "/student/dashboard";
+  if (role === "TPO_ADMIN") return "/tpo/dashboard";
+  if (role === "COLLEGE_ADMIN") return "/college/settings";
+  if (role === "RECRUITER" || role === "COMPANY_ADMIN") return "/recruiter/dashboard";
+  return "/admin/overview";
+}
+
+export function AppShell({ children, role, allowedRoles = [role] }: { children: React.ReactNode; role: Role; allowedRoles?: Role[] }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, token, hydrated, hydrate, logout } = useAuthStore();
-  const nav = navByRole[role];
+  const shellRole = user && allowedRoles.includes(user.role) ? user.role : role;
+  const nav = navByRole[shellRole];
   const [collapsed, setCollapsed] = React.useState(false);
   const activePage = getActivePage(pathname, nav);
-  const meta = roleMeta[role];
+  const meta = roleMeta[shellRole];
 
   React.useEffect(() => {
     hydrate();
@@ -173,12 +228,10 @@ export function AppShell({ children, role }: { children: React.ReactNode; role: 
   React.useEffect(() => {
     if (!hydrated) return;
     if (!token) router.replace("/login");
-    if (user && user.role !== role) {
-      const fallback =
-        user.role === "STUDENT" ? "/student/dashboard" : user.role === "TPO_ADMIN" ? "/tpo/dashboard" : "/admin/overview";
-      router.replace(fallback);
+    if (user && !allowedRoles.includes(user.role)) {
+      router.replace(fallbackForRole(user.role));
     }
-  }, [hydrated, token, user, role, router]);
+  }, [allowedRoles, hydrated, token, user, role, router]);
 
   const handleLogout = React.useCallback(() => {
     logout();

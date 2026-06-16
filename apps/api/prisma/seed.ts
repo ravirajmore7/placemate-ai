@@ -32,6 +32,24 @@ const skillSets = [
 ];
 
 async function main() {
+  await prisma.accountStatusLog.deleteMany();
+  await prisma.studentVisibilitySetting.deleteMany();
+  await prisma.billingCustomer.deleteMany();
+  await prisma.featureLimit.deleteMany();
+  await prisma.usageRecord.deleteMany();
+  await prisma.invoice.deleteMany();
+  await prisma.payment.deleteMany();
+  await prisma.subscription.deleteMany();
+  await prisma.plan.deleteMany();
+  await prisma.contactRequest.deleteMany();
+  await prisma.candidateShortlist.deleteMany();
+  await prisma.candidateView.deleteMany();
+  await prisma.recruiterApplication.deleteMany();
+  await prisma.recruiterJob.deleteMany();
+  await prisma.recruiterProfile.deleteMany();
+  await prisma.teamInvitation.deleteMany();
+  await prisma.organizationMember.deleteMany();
+  await prisma.organization.deleteMany();
   await prisma.auditLog.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.roadmapTask.deleteMany();
@@ -59,7 +77,7 @@ async function main() {
 
   const passwordHash = await bcrypt.hash("Password@123", 12);
 
-  const [superAdmin, tpoAdmin] = await Promise.all([
+  const [superAdmin, tpoAdmin, collegeAdmin, companyAdmin, recruiterOne, recruiterTwo] = await Promise.all([
     prisma.user.create({
       data: {
         name: "Raviraj Platform Admin",
@@ -75,8 +93,208 @@ async function main() {
         passwordHash,
         role: Role.TPO_ADMIN
       }
+    }),
+    prisma.user.create({
+      data: {
+        name: "Nisha College Admin",
+        email: "college@placemate.ai",
+        passwordHash,
+        role: Role.COLLEGE_ADMIN
+      }
+    }),
+    prisma.user.create({
+      data: {
+        name: "Arjun Company Admin",
+        email: "company@placemate.ai",
+        passwordHash,
+        role: Role.COMPANY_ADMIN
+      }
+    }),
+    prisma.user.create({
+      data: {
+        name: "Riya Recruiter",
+        email: "recruiter@placemate.ai",
+        passwordHash,
+        role: Role.RECRUITER
+      }
+    }),
+    prisma.user.create({
+      data: {
+        name: "Kabir Recruiter",
+        email: "recruiter2@placemate.ai",
+        passwordHash,
+        role: Role.RECRUITER
+      }
     })
   ]);
+
+  const planRows = [
+    {
+      name: "Free Student",
+      code: "free-student",
+      audience: "STUDENT",
+      description: "Basic placement profile and limited readiness intelligence.",
+      priceMonthly: 0,
+      priceYearly: 0,
+      featuresJson: ["Basic profile", "Basic readiness score", "Limited SkillProof refresh"],
+      limitsJson: { skillproof_refreshes: 3, company_fit_checks: 5, resume_analyses: 1, roadmaps: 1 }
+    },
+    {
+      name: "Pro Student",
+      code: "pro-student",
+      audience: "STUDENT",
+      description: "Unlimited SkillProof, resume analyzer, company fit reports, and roadmaps.",
+      priceMonthly: 49900,
+      priceYearly: 499900,
+      featuresJson: ["Unlimited SkillProof refresh", "Resume analyzer", "Company fit reports", "Roadmaps"],
+      limitsJson: { skillproof_refreshes: "unlimited", company_fit_checks: "unlimited", resume_analyses: "unlimited", roadmaps: "unlimited" }
+    },
+    {
+      name: "College Basic",
+      code: "college-basic",
+      audience: "COLLEGE",
+      description: "For small placement cells launching structured placement workflows.",
+      priceMonthly: 999900,
+      priceYearly: 9999000,
+      featuresJson: ["500 students", "2 TPO admins", "20 drives per month", "Basic analytics"],
+      limitsJson: { student_profiles: 500, tpo_admins: 2, drives: 20, exports: 0 }
+    },
+    {
+      name: "College Pro",
+      code: "college-pro",
+      audience: "COLLEGE",
+      description: "Advanced placement intelligence for growing colleges.",
+      priceMonthly: 2499900,
+      priceYearly: 24999000,
+      featuresJson: ["3000 students", "10 TPO admins", "Unlimited drives", "Skill gap reports", "Exports"],
+      limitsJson: { student_profiles: 3000, tpo_admins: 10, drives: "unlimited", exports: "unlimited" }
+    },
+    {
+      name: "College Enterprise",
+      code: "college-enterprise",
+      audience: "COLLEGE",
+      description: "Custom onboarding, security, support, and limits.",
+      priceMonthly: 0,
+      priceYearly: 0,
+      featuresJson: ["Custom limits", "Dedicated support", "Advanced security", "Custom onboarding"],
+      limitsJson: { student_profiles: "unlimited", tpo_admins: "unlimited", drives: "unlimited", exports: "unlimited" }
+    },
+    {
+      name: "Recruiter Basic",
+      code: "recruiter-basic",
+      audience: "RECRUITER",
+      description: "Starter hiring workflow for verified student discovery.",
+      priceMonthly: 499900,
+      priceYearly: 4999000,
+      featuresJson: ["5 job posts/month", "100 candidate views/month", "Basic filters"],
+      limitsJson: { job_posts: 5, candidate_views: 100, exports: 0 }
+    },
+    {
+      name: "Recruiter Pro",
+      code: "recruiter-pro",
+      audience: "RECRUITER",
+      description: "SkillProof candidate previews and full shortlisting pipeline.",
+      priceMonthly: 1499900,
+      priceYearly: 14999000,
+      featuresJson: ["25 job posts/month", "1000 candidate views/month", "SkillProof preview", "Shortlisting pipeline"],
+      limitsJson: { job_posts: 25, candidate_views: 1000, exports: 10 }
+    },
+    {
+      name: "Recruiter Enterprise",
+      code: "recruiter-enterprise",
+      audience: "RECRUITER",
+      description: "Unlimited recruiter hiring with dedicated support.",
+      priceMonthly: 0,
+      priceYearly: 0,
+      featuresJson: ["Unlimited jobs", "Advanced search", "Bulk hiring", "Dedicated support"],
+      limitsJson: { job_posts: "unlimited", candidate_views: "unlimited", exports: "unlimited" }
+    }
+  ];
+
+  await prisma.plan.createMany({ data: planRows });
+  const plans = await prisma.plan.findMany();
+  const planByCode = Object.fromEntries(plans.map((plan) => [plan.code, plan]));
+
+  const [demoCollegeOrg, demoCompanyOrg] = await Promise.all([
+    prisma.organization.create({
+      data: {
+        name: "Nexus Institute of Technology",
+        type: "COLLEGE",
+        website: "https://nexus.example.edu",
+        location: "Pune, Maharashtra",
+        status: "active",
+        metadataJson: {
+          officialEmail: "placements@nexus.example.edu",
+          departments: ["CSE", "IT", "ECE", "EEE"],
+          approxStudentCount: 1200,
+          tpoContactName: "Priya TPO Admin",
+          tpoContactEmail: "tpo@placemate.ai",
+          phone: "9876500001"
+        }
+      }
+    }),
+    prisma.organization.create({
+      data: {
+        name: "SkillForge Technologies",
+        type: "COMPANY",
+        website: "https://skillforge.example.com",
+        industry: "Product Engineering",
+        size: "501-1000",
+        location: "Bengaluru, Karnataka",
+        status: "active",
+        description: "AI and cloud product engineering company hiring verified campus talent.",
+        metadataJson: {
+          headquarters: "Bengaluru",
+          linkedInUrl: "https://linkedin.com/company/skillforge",
+          careersPageUrl: "https://skillforge.example.com/careers",
+          contactEmail: "talent@skillforge.example.com",
+          verified: true
+        }
+      }
+    })
+  ]);
+
+  await prisma.organizationMember.createMany({
+    data: [
+      { organizationId: demoCollegeOrg.id, userId: collegeAdmin.id, role: Role.COLLEGE_ADMIN },
+      { organizationId: demoCollegeOrg.id, userId: tpoAdmin.id, role: Role.TPO_ADMIN, departmentsJson: ["CSE", "IT"] },
+      { organizationId: demoCompanyOrg.id, userId: companyAdmin.id, role: Role.COMPANY_ADMIN },
+      { organizationId: demoCompanyOrg.id, userId: recruiterOne.id, role: Role.RECRUITER },
+      { organizationId: demoCompanyOrg.id, userId: recruiterTwo.id, role: Role.RECRUITER }
+    ]
+  });
+
+  await prisma.recruiterProfile.createMany({
+    data: [
+      {
+        userId: companyAdmin.id,
+        organizationId: demoCompanyOrg.id,
+        fullName: companyAdmin.name,
+        designation: "Head of Talent",
+        phone: "9876500100",
+        linkedinUrl: "https://linkedin.com/in/arjun-company-admin",
+        verified: true
+      },
+      {
+        userId: recruiterOne.id,
+        organizationId: demoCompanyOrg.id,
+        fullName: recruiterOne.name,
+        designation: "Campus Recruiter",
+        phone: "9876500101",
+        linkedinUrl: "https://linkedin.com/in/riya-recruiter",
+        verified: true
+      },
+      {
+        userId: recruiterTwo.id,
+        organizationId: demoCompanyOrg.id,
+        fullName: recruiterTwo.name,
+        designation: "Technical Recruiter",
+        phone: "9876500102",
+        linkedinUrl: "https://linkedin.com/in/kabir-recruiter",
+        verified: true
+      }
+    ]
+  });
 
   const students = [];
   for (let index = 0; index < 10; index += 1) {
@@ -189,6 +407,18 @@ async function main() {
         studentProfileId: profile.id,
         score: readiness.score,
         ...readinessJson(readiness)
+      }
+    });
+
+    await prisma.studentVisibilitySetting.create({
+      data: {
+        studentProfileId: profile.id,
+        visibility: index < 8 ? "verified_recruiters" : "private",
+        allowRecruiterContact: index < 8,
+        showEmail: false,
+        showPhone: false,
+        showResume: index % 2 === 0,
+        availabilityStatus: index > 7 ? "available_now" : "open_to_opportunities"
       }
     });
 
@@ -684,17 +914,304 @@ async function main() {
     });
   }
 
+  const recruiterJobSeeds = [
+    {
+      title: "Backend Developer Intern",
+      roleCategory: "Backend",
+      jobType: "Internship",
+      workMode: "Hybrid",
+      location: "Bengaluru",
+      stipend: 45000,
+      experienceLevel: "Student / Fresher",
+      requiredSkillsJson: ["Java", "Spring Boot", "SQL", "REST APIs"],
+      preferredSkillsJson: ["Docker", "AWS"],
+      minimumCgpa: 7,
+      allowedBranchesJson: ["CSE", "IT"],
+      maxBacklogs: 0,
+      hiringRoundsJson: ["Online coding test", "Technical interview", "HR discussion"],
+      openings: 8,
+      deadline: new Date("2026-08-20"),
+      visibility: "public",
+      status: "open",
+      description: "Work with SkillForge backend teams on APIs, data models, and cloud-ready services."
+    },
+    {
+      title: "Data Analyst Intern",
+      roleCategory: "Data",
+      jobType: "Internship",
+      workMode: "Remote",
+      location: "Remote",
+      stipend: 30000,
+      experienceLevel: "Student",
+      requiredSkillsJson: ["Python", "SQL", "Pandas", "Communication"],
+      preferredSkillsJson: ["Power BI", "Machine Learning"],
+      minimumCgpa: 6.5,
+      allowedBranchesJson: ["CSE", "IT", "ECE"],
+      maxBacklogs: 1,
+      hiringRoundsJson: ["Analytics assignment", "Case interview"],
+      openings: 5,
+      deadline: new Date("2026-08-25"),
+      visibility: "public",
+      status: "open",
+      description: "Analyze product and hiring data, build dashboards, and explain insights to business teams."
+    },
+    {
+      title: "AI/ML Intern",
+      roleCategory: "AI / ML",
+      jobType: "Internship + PPO",
+      workMode: "Hybrid",
+      location: "Pune",
+      stipend: 65000,
+      experienceLevel: "Advanced Student",
+      requiredSkillsJson: ["Python", "Machine Learning", "FastAPI", "SQL"],
+      preferredSkillsJson: ["Vector Search", "Docker"],
+      minimumCgpa: 7.5,
+      allowedBranchesJson: ["CSE", "IT"],
+      maxBacklogs: 0,
+      hiringRoundsJson: ["ML assignment", "Technical deep dive", "Manager round"],
+      openings: 4,
+      deadline: new Date("2026-09-05"),
+      visibility: "specific_colleges",
+      status: "open",
+      description: "Build ML-backed SkillProof intelligence for candidate matching and resume insights."
+    },
+    {
+      title: "Full Stack Developer",
+      roleCategory: "Full Stack",
+      jobType: "Full-time",
+      workMode: "On-site",
+      location: "Bengaluru",
+      ctc: 1200000,
+      experienceLevel: "Fresher",
+      requiredSkillsJson: ["React", "Node.js", "PostgreSQL", "Git"],
+      preferredSkillsJson: ["Next.js", "NestJS", "Tailwind CSS"],
+      minimumCgpa: 7,
+      allowedBranchesJson: ["CSE", "IT"],
+      maxBacklogs: 0,
+      hiringRoundsJson: ["Coding test", "System design basics", "Project discussion"],
+      openings: 10,
+      deadline: new Date("2026-09-12"),
+      visibility: "public",
+      status: "open",
+      description: "Join product engineering to ship SaaS dashboards, APIs, and polished frontend experiences."
+    },
+    {
+      title: "Cloud Engineer Intern",
+      roleCategory: "Cloud",
+      jobType: "Internship",
+      workMode: "Hybrid",
+      location: "Hyderabad",
+      stipend: 50000,
+      experienceLevel: "Student",
+      requiredSkillsJson: ["AWS", "Docker", "Linux", "SQL"],
+      preferredSkillsJson: ["Kubernetes", "Terraform"],
+      minimumCgpa: 7,
+      allowedBranchesJson: ["CSE", "IT", "ECE"],
+      maxBacklogs: 0,
+      hiringRoundsJson: ["Cloud basics test", "Technical interview"],
+      openings: 6,
+      deadline: new Date("2026-09-18"),
+      visibility: "public",
+      status: "open",
+      description: "Support cloud deployments, observability, and secure infrastructure for SaaS products."
+    }
+  ];
+
+  const recruiterJobs = await Promise.all(
+    recruiterJobSeeds.map((job, index) =>
+      prisma.recruiterJob.create({
+        data: {
+          organizationId: demoCompanyOrg.id,
+          createdById: index % 2 === 0 ? recruiterOne.id : recruiterTwo.id,
+          ...job
+        }
+      })
+    )
+  );
+
+  for (const [index, studentProfileId] of students.slice(0, 6).entries()) {
+    const job = recruiterJobs[index % recruiterJobs.length];
+    await prisma.recruiterApplication.create({
+      data: {
+        recruiterJobId: job.id,
+        studentProfileId,
+        status: ["applied", "shortlisted", "assessment", "interview", "offered", "applied"][index],
+        matchScore: clampScore(62 + index * 6),
+        source: index % 2 === 0 ? "student" : "invite"
+      }
+    });
+  }
+
+  await prisma.candidateView.createMany({
+    data: students.slice(0, 5).map((studentProfileId, index) => ({
+      recruiterId: index % 2 === 0 ? recruiterOne.id : recruiterTwo.id,
+      studentProfileId,
+      recruiterJobId: recruiterJobs[index % recruiterJobs.length].id,
+      organizationId: demoCompanyOrg.id,
+      viewedAt: new Date(Date.now() - index * 60 * 60 * 1000)
+    }))
+  });
+
+  await prisma.candidateShortlist.createMany({
+    data: students.slice(1, 6).map((studentProfileId, index) => ({
+      recruiterId: index % 2 === 0 ? recruiterOne.id : recruiterTwo.id,
+      studentProfileId,
+      recruiterJobId: recruiterJobs[index % recruiterJobs.length].id,
+      organizationId: demoCompanyOrg.id,
+      status: ["saved", "shortlisted", "assessment", "interview", "offered"][index],
+      rating: 3 + (index % 3),
+      notes: "Strong SkillProof signal from demo seed data.",
+      interviewDate: index === 3 ? new Date("2026-08-30T10:30:00.000Z") : null
+    }))
+  });
+
+  await prisma.contactRequest.createMany({
+    data: students.slice(0, 3).map((studentProfileId, index) => ({
+      recruiterId: recruiterOne.id,
+      studentProfileId,
+      organizationId: demoCompanyOrg.id,
+      recruiterJobId: recruiterJobs[index].id,
+      status: index === 0 ? "accepted" : "pending",
+      message: "We liked your SkillProof profile and would like to discuss an opportunity."
+    }))
+  });
+
+  const collegeSubscription = await prisma.subscription.create({
+    data: {
+      organizationId: demoCollegeOrg.id,
+      planId: planByCode["college-pro"].id,
+      status: "active",
+      billingCycle: "monthly",
+      currentPeriodStart: new Date("2026-06-01"),
+      currentPeriodEnd: new Date("2026-06-30"),
+      razorpayCustomerId: "cust_demo_college",
+      razorpaySubscriptionId: "sub_demo_college"
+    }
+  });
+  const recruiterSubscription = await prisma.subscription.create({
+    data: {
+      organizationId: demoCompanyOrg.id,
+      planId: planByCode["recruiter-pro"].id,
+      status: "active",
+      billingCycle: "monthly",
+      currentPeriodStart: new Date("2026-06-01"),
+      currentPeriodEnd: new Date("2026-06-30"),
+      razorpayCustomerId: "cust_demo_recruiter",
+      razorpaySubscriptionId: "sub_demo_recruiter"
+    }
+  });
+
+  const [collegePayment, recruiterPayment] = await Promise.all([
+    prisma.payment.create({
+      data: {
+        subscriptionId: collegeSubscription.id,
+        organizationId: demoCollegeOrg.id,
+        userId: collegeAdmin.id,
+        providerPaymentId: "pay_demo_college",
+        providerOrderId: "order_demo_college",
+        providerSubscriptionId: "sub_demo_college",
+        amount: planByCode["college-pro"].priceMonthly,
+        currency: "INR",
+        status: "paid",
+        method: "upi",
+        paidAt: new Date("2026-06-02"),
+        rawPayloadJson: { source: "seed" }
+      }
+    }),
+    prisma.payment.create({
+      data: {
+        subscriptionId: recruiterSubscription.id,
+        organizationId: demoCompanyOrg.id,
+        userId: companyAdmin.id,
+        providerPaymentId: "pay_demo_recruiter",
+        providerOrderId: "order_demo_recruiter",
+        providerSubscriptionId: "sub_demo_recruiter",
+        amount: planByCode["recruiter-pro"].priceMonthly,
+        currency: "INR",
+        status: "paid",
+        method: "card",
+        paidAt: new Date("2026-06-02"),
+        rawPayloadJson: { source: "seed" }
+      }
+    })
+  ]);
+
+  await prisma.invoice.createMany({
+    data: [
+      {
+        subscriptionId: collegeSubscription.id,
+        organizationId: demoCollegeOrg.id,
+        paymentId: collegePayment.id,
+        invoiceNumber: "PM-SEED-COLLEGE-001",
+        amount: collegePayment.amount,
+        currency: "INR",
+        status: "paid",
+        paidAt: collegePayment.paidAt
+      },
+      {
+        subscriptionId: recruiterSubscription.id,
+        organizationId: demoCompanyOrg.id,
+        paymentId: recruiterPayment.id,
+        invoiceNumber: "PM-SEED-RECRUITER-001",
+        amount: recruiterPayment.amount,
+        currency: "INR",
+        status: "paid",
+        paidAt: recruiterPayment.paidAt
+      }
+    ]
+  });
+
+  const periodStart = new Date("2026-06-01");
+  const periodEnd = new Date("2026-06-30T23:59:59.999Z");
+  await prisma.usageRecord.createMany({
+    data: [
+      { organizationId: demoCompanyOrg.id, userId: recruiterOne.id, featureKey: "candidate_views", count: 58, periodStart, periodEnd, metadataJson: { source: "seed" } },
+      { organizationId: demoCompanyOrg.id, userId: recruiterOne.id, featureKey: "job_posts", count: recruiterJobs.length, periodStart, periodEnd, metadataJson: { source: "seed" } },
+      { organizationId: demoCollegeOrg.id, userId: tpoAdmin.id, featureKey: "drives", count: drives.length, periodStart, periodEnd, metadataJson: { source: "seed" } },
+      { organizationId: demoCollegeOrg.id, userId: collegeAdmin.id, featureKey: "student_profiles", count: students.length, periodStart, periodEnd, metadataJson: { source: "seed" } },
+      { userId: stage2Students[0].userId, featureKey: "resume_analyses", count: 1, periodStart, periodEnd, metadataJson: { source: "seed" } }
+    ]
+  });
+
+  await prisma.billingCustomer.createMany({
+    data: [
+      { organizationId: demoCollegeOrg.id, providerCustomerId: "cust_demo_college", email: "college@placemate.ai", name: demoCollegeOrg.name },
+      { organizationId: demoCompanyOrg.id, providerCustomerId: "cust_demo_recruiter", email: "company@placemate.ai", name: demoCompanyOrg.name }
+    ]
+  });
+
+  await prisma.teamInvitation.create({
+    data: {
+      organizationId: demoCompanyOrg.id,
+      email: "future-recruiter@skillforge.example.com",
+      role: Role.RECRUITER,
+      token: "seed-invite-token",
+      status: "pending",
+      expiresAt: new Date("2026-07-01"),
+      invitedById: companyAdmin.id
+    }
+  });
+
   await prisma.auditLog.create({
     data: {
       userId: superAdmin.id,
       action: "SEED_COMPLETED",
       entityType: "SYSTEM",
-      metadataJson: { students: 10, drives: 5 }
+      metadataJson: { students: 10, drives: 5, recruiterJobs: recruiterJobs.length, stage: 3 }
+    }
+  });
+
+  await prisma.accountStatusLog.create({
+    data: {
+      organizationId: demoCompanyOrg.id,
+      action: "activated",
+      reason: "Seeded demo company account",
+      performedById: superAdmin.id
     }
   });
 
   console.log("Seed complete");
-  console.log("Demo logins: student1@placemate.ai / Password@123, tpo@placemate.ai / Password@123, admin@placemate.ai / Password@123");
+  console.log("Demo logins: student1@placemate.ai, tpo@placemate.ai, college@placemate.ai, recruiter@placemate.ai, company@placemate.ai, admin@placemate.ai / Password@123");
 }
 
 main()

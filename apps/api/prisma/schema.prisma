@@ -12,6 +12,7 @@ enum Role {
   TPO_ADMIN
   COLLEGE_ADMIN
   RECRUITER
+  COMPANY_ADMIN
   SUPER_ADMIN
 }
 
@@ -568,4 +569,340 @@ model RoadmapTask {
   @@index([roadmapId])
   @@index([completed])
   @@index([category])
+}
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  website     String?
+  logoUrl     String?
+  industry    String?
+  size        String?
+  location    String?
+  status      String   @default("active")
+  description String?
+  metadataJson Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type])
+  @@index([status])
+  @@index([name])
+}
+
+model OrganizationMember {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  role           Role
+  status         String   @default("active")
+  departmentsJson Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([role])
+  @@index([status])
+}
+
+model TeamInvitation {
+  id             String   @id @default(cuid())
+  organizationId String
+  email          String
+  role           Role
+  token          String   @unique
+  status         String   @default("pending")
+  expiresAt      DateTime
+  invitedById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([status])
+}
+
+model RecruiterProfile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  organizationId String
+  fullName       String
+  designation    String?
+  phone          String?
+  linkedinUrl    String?
+  verified       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([verified])
+}
+
+model RecruiterJob {
+  id                  String   @id @default(cuid())
+  organizationId      String
+  createdById         String
+  title               String
+  roleCategory        String?
+  jobType             String
+  workMode            String
+  location            String
+  ctc                 Float?
+  stipend             Float?
+  experienceLevel     String?
+  description         String
+  requiredSkillsJson  Json
+  preferredSkillsJson Json?
+  eligibilityJson     Json?
+  minimumCgpa         Float    @default(0)
+  allowedBranchesJson Json?
+  maxBacklogs         Int      @default(0)
+  hiringRoundsJson    Json?
+  openings            Int      @default(1)
+  deadline            DateTime
+  visibility          String   @default("public")
+  status              String   @default("draft")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([createdById])
+  @@index([status])
+  @@index([visibility])
+  @@index([deadline])
+}
+
+model RecruiterApplication {
+  id               String   @id @default(cuid())
+  recruiterJobId   String
+  studentProfileId String
+  status           String   @default("applied")
+  matchScore       Int      @default(0)
+  source           String   @default("student")
+  appliedAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([recruiterJobId, studentProfileId])
+  @@index([recruiterJobId])
+  @@index([studentProfileId])
+  @@index([status])
+}
+
+model CandidateView {
+  id               String   @id @default(cuid())
+  recruiterId      String
+  studentProfileId String
+  recruiterJobId   String?
+  organizationId   String
+  viewedAt         DateTime @default(now())
+
+  @@index([recruiterId])
+  @@index([studentProfileId])
+  @@index([organizationId])
+  @@index([viewedAt])
+}
+
+model CandidateShortlist {
+  id               String   @id @default(cuid())
+  recruiterJobId   String?
+  studentProfileId String
+  recruiterId      String
+  organizationId   String
+  status           String   @default("saved")
+  rating           Int?
+  notes            String?
+  interviewDate    DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([organizationId, recruiterJobId, studentProfileId])
+  @@index([recruiterId])
+  @@index([organizationId])
+  @@index([status])
+}
+
+model ContactRequest {
+  id               String   @id @default(cuid())
+  recruiterId      String
+  studentProfileId String
+  organizationId   String
+  recruiterJobId   String?
+  status           String   @default("pending")
+  message          String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([recruiterId])
+  @@index([studentProfileId])
+  @@index([organizationId])
+  @@index([status])
+}
+
+model Plan {
+  id            String   @id @default(cuid())
+  name          String
+  code          String   @unique
+  audience      String
+  description   String?
+  priceMonthly  Int      @default(0)
+  priceYearly   Int      @default(0)
+  currency      String   @default("INR")
+  featuresJson  Json
+  limitsJson    Json
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([audience])
+  @@index([active])
+}
+
+model Subscription {
+  id                      String   @id @default(cuid())
+  organizationId          String?
+  userId                  String?
+  planId                  String
+  status                  String   @default("trialing")
+  billingCycle            String   @default("monthly")
+  startDate               DateTime @default(now())
+  endDate                 DateTime?
+  trialEndsAt             DateTime?
+  currentPeriodStart      DateTime @default(now())
+  currentPeriodEnd        DateTime?
+  razorpayCustomerId      String?
+  razorpaySubscriptionId  String?
+  cancelAtPeriodEnd       Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([planId])
+  @@index([status])
+}
+
+model Payment {
+  id                     String   @id @default(cuid())
+  subscriptionId         String?
+  organizationId         String?
+  userId                 String?
+  provider               String   @default("razorpay")
+  providerPaymentId      String?
+  providerOrderId        String?
+  providerSubscriptionId String?
+  amount                 Int
+  currency               String   @default("INR")
+  status                 String
+  method                 String?
+  paidAt                 DateTime?
+  rawPayloadJson         Json?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([subscriptionId])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([status])
+  @@index([providerPaymentId])
+  @@index([providerOrderId])
+}
+
+model Invoice {
+  id             String   @id @default(cuid())
+  subscriptionId String?
+  organizationId String?
+  paymentId      String?
+  invoiceNumber  String   @unique
+  amount         Int
+  currency       String   @default("INR")
+  status         String   @default("issued")
+  invoiceUrl     String?
+  issuedAt       DateTime @default(now())
+  paidAt         DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([subscriptionId])
+  @@index([organizationId])
+  @@index([paymentId])
+  @@index([status])
+}
+
+model UsageRecord {
+  id             String   @id @default(cuid())
+  organizationId String?
+  userId         String?
+  featureKey     String
+  count          Int      @default(1)
+  periodStart    DateTime
+  periodEnd      DateTime
+  metadataJson   Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([featureKey])
+  @@index([periodStart, periodEnd])
+}
+
+model FeatureLimit {
+  id          String   @id @default(cuid())
+  planId      String
+  featureKey  String
+  limitValue  Int
+  period      String   @default("monthly")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([planId, featureKey])
+  @@index([featureKey])
+}
+
+model BillingCustomer {
+  id                String   @id @default(cuid())
+  organizationId    String?
+  userId            String?
+  provider          String   @default("razorpay")
+  providerCustomerId String?
+  email             String
+  name              String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([providerCustomerId])
+}
+
+model StudentVisibilitySetting {
+  id                    String   @id @default(cuid())
+  studentProfileId      String   @unique
+  visibility            String   @default("private")
+  allowRecruiterContact Boolean  @default(false)
+  showEmail             Boolean  @default(false)
+  showPhone             Boolean  @default(false)
+  showResume            Boolean  @default(false)
+  availabilityStatus    String   @default("available")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([visibility])
+}
+
+model AccountStatusLog {
+  id             String   @id @default(cuid())
+  organizationId String?
+  userId         String?
+  action         String
+  reason         String?
+  performedById  String
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([action])
 }

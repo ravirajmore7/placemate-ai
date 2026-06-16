@@ -1,18 +1,24 @@
 import type {
   Application,
+  BillingOverview,
+  CandidateSummary,
   Drive,
   GitHubProfile,
   HackerRankProfile,
   JobStatus,
   JobMatchResult,
   LeetCodeProfile,
+  Organization,
   Paginated,
+  Plan,
   Readiness,
+  RecruiterJob,
   ResumeAnalysis,
   SkillProofScore,
   SkillVerification,
   StudentProfile,
-  StudentRoadmap
+  StudentRoadmap,
+  Subscription
 } from "@/lib/types";
 
 const user = {
@@ -95,13 +101,170 @@ const skillProof: SkillProofScore = {
   calculatedAt: new Date().toISOString()
 };
 
+const mockOrganization: Organization = {
+  id: "mock-company-org",
+  name: "SkillForge Technologies",
+  type: "company",
+  website: "https://skillforge.example",
+  industry: "SaaS",
+  size: "51-200",
+  location: "Bengaluru",
+  status: "active",
+  description: "Demo hiring company for recruiter portal testing."
+};
+
+const mockCollegeOrganization: Organization = {
+  id: "mock-college-org",
+  name: "Nexus Institute of Technology",
+  type: "college",
+  website: "https://nexus.example",
+  industry: "Education",
+  size: "3000 students",
+  location: "Pune",
+  status: "active",
+  description: "Demo college tenant for SaaS admin testing."
+};
+
+const mockPlans: Plan[] = [
+  { id: "plan-student-free", name: "Student Free", code: "free-student", audience: "student", description: "Core student placement profile.", priceMonthly: 0, priceYearly: 0, currency: "INR", featuresJson: ["Profile builder", "Readiness score", "Drive applications"], limitsJson: { resume_analyses: 2 }, active: true },
+  { id: "plan-recruiter-pro", name: "Recruiter Pro", code: "recruiter-pro", audience: "recruiter", description: "Candidate discovery, jobs, shortlists, and contact requests.", priceMonthly: 99900, priceYearly: 999000, currency: "INR", featuresJson: ["10 active jobs", "Candidate search", "Shortlists", "Contact requests"], limitsJson: { job_posts: 10, candidate_views: 300, contact_requests: 80 }, active: true },
+  { id: "plan-college-pro", name: "College Pro", code: "college-pro", audience: "college", description: "TPO dashboards, reports, billing, and team access.", priceMonthly: 499900, priceYearly: 4999000, currency: "INR", featuresJson: ["TPO analytics", "Reports", "Team seats", "Billing"], limitsJson: { student_profiles: 2000, drives: 50, reports: 100 }, active: true }
+];
+
+const mockUsage = {
+  items: [
+    { featureKey: "candidate_views", used: 42, limit: 300, remaining: 258 },
+    { featureKey: "job_posts", used: 3, limit: 10, remaining: 7 },
+    { featureKey: "contact_requests", used: 8, limit: 80, remaining: 72 }
+  ]
+};
+
+const mockSubscription: Subscription = {
+  id: "mock-subscription",
+  organizationId: mockOrganization.id,
+  planId: "plan-recruiter-pro",
+  status: "trialing",
+  billingCycle: "monthly",
+  trialEndsAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 10).toISOString(),
+  currentPeriodStart: new Date().toISOString(),
+  currentPeriodEnd: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
+  cancelAtPeriodEnd: false,
+  plan: mockPlans[1]
+};
+
+const mockBilling: BillingOverview = {
+  subscription: mockSubscription,
+  payments: [
+    { id: "mock-payment", amount: 99900, currency: "INR", status: "paid", method: "upi", providerPaymentId: "pay_mock", providerOrderId: "order_mock", paidAt: new Date().toISOString(), createdAt: new Date().toISOString() }
+  ],
+  invoices: [
+    { id: "mock-invoice", invoiceNumber: "INV-MOCK-001", amount: 99900, currency: "INR", status: "paid", issuedAt: new Date().toISOString(), paidAt: new Date().toISOString() }
+  ],
+  usage: mockUsage,
+  paymentsConfigured: false
+};
+
+const recruiterJob: RecruiterJob = {
+  id: "mock-recruiter-job",
+  organizationId: mockOrganization.id,
+  createdById: "mock-recruiter",
+  title: "Backend Developer Intern",
+  roleCategory: "Backend",
+  jobType: "Internship",
+  workMode: "Hybrid",
+  location: "Bengaluru",
+  ctc: 900000,
+  stipend: 45000,
+  experienceLevel: "Fresher",
+  description: "Build APIs, background jobs, and analytics features for a SaaS product.",
+  requiredSkillsJson: ["Node.js", "PostgreSQL", "React"],
+  preferredSkillsJson: ["AWS", "Docker"],
+  minimumCgpa: 7.5,
+  allowedBranchesJson: ["CSE", "IT"],
+  maxBacklogs: 0,
+  hiringRoundsJson: ["Online assessment", "Technical interview", "HR"],
+  openings: 4,
+  deadline: new Date(Date.now() + 1000 * 60 * 60 * 24 * 20).toISOString(),
+  visibility: "public",
+  status: "open",
+  organization: mockOrganization
+};
+
+const mockCandidate: CandidateSummary = {
+  id: profile.id,
+  name: user.name,
+  collegeName: profile.collegeName,
+  branch: profile.branch,
+  graduationYear: profile.graduationYear,
+  cgpa: profile.cgpa,
+  location: profile.location,
+  targetRole: profile.targetRole,
+  placementStatus: profile.placementStatus,
+  skills: profile.skills.map((skill) => skill.name),
+  topProjects: profile.projects,
+  skillProofScore: skillProof.overallScore,
+  resumeScore: skillProof.resumeScore,
+  githubScore: skillProof.githubScore,
+  leetcodeScore: skillProof.leetcodeScore,
+  hackerRankScore: skillProof.hackerRankScore,
+  matchScore: 86,
+  canContact: true,
+  resumeVisible: true
+};
+
 let mockResumeJob: JobStatus | null = null;
 
 export async function mockApiFetch<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
   await new Promise((resolve) => setTimeout(resolve, 120));
   const method = options.method ?? "GET";
+  const pathOnly = path.split("?")[0];
 
   if (path === "/auth/me") return { ...user, studentProfile: { id: profile.id, readinessScore: profile.readinessScore, placementStatus: profile.placementStatus } } as T;
+  if (pathOnly === "/plans") return mockPlans as T;
+  if (pathOnly.startsWith("/plans/")) return mockPlans.find((plan) => plan.code === pathOnly.split("/").pop()) as T;
+  if (pathOnly === "/billing/current") return mockBilling as T;
+  if (pathOnly === "/billing/create-subscription" && method === "POST") return { checkoutMode: "mock", subscription: mockSubscription } as T;
+  if (pathOnly === "/payments/razorpay/verify" && method === "POST") return { ok: true, payment: mockBilling.payments[0] } as T;
+  if (pathOnly === "/usage/current") return mockUsage as T;
+  if (pathOnly === "/recruiter/dashboard") {
+    return {
+      cards: { activeJobs: 3, openApplications: 18, shortlists: 7, contactRequests: 8, profileViews: 42 },
+      recentJobs: [recruiterJob],
+      usage: mockUsage,
+      subscription: mockSubscription
+    } as T;
+  }
+  if (pathOnly === "/company/profile" && method === "PUT") return { ...mockOrganization, ...(options.body as Record<string, unknown>) } as T;
+  if (pathOnly === "/company/profile") return mockOrganization as T;
+  if (pathOnly === "/company/team") return { members: [{ id: "member-1", role: "COMPANY_ADMIN", user: { name: "Company Admin" } }, { id: "member-2", role: "RECRUITER", user: { name: "Demo Recruiter" } }], invitations: [] } as T;
+  if (pathOnly === "/company/team/invite" && method === "POST") return { id: "invite-mock", status: "pending", ...(options.body as Record<string, unknown>) } as T;
+  if (pathOnly === "/recruiter/jobs" && method === "POST") return { ...recruiterJob, id: `mock-job-${Date.now()}`, ...(options.body as Record<string, unknown>) } as T;
+  if (pathOnly === "/recruiter/jobs") return { items: [recruiterJob], total: 1, page: 1, limit: 20 } satisfies Paginated<RecruiterJob> as T;
+  if (pathOnly.endsWith("/applications") && pathOnly.startsWith("/recruiter/jobs/")) return { items: [{ id: "rec-app-1", status: "applied", student: mockCandidate, job: recruiterJob, appliedAt: new Date().toISOString() }] } as T;
+  if (pathOnly.startsWith("/recruiter/jobs/")) return { ...recruiterJob, id: pathOnly.split("/").pop() ?? recruiterJob.id, applicationsCount: 12 } as T;
+  if (pathOnly === "/recruiter/candidates") return { items: [mockCandidate], total: 1, page: 1, limit: 20 } satisfies Paginated<CandidateSummary> as T;
+  if (pathOnly.endsWith("/view") || pathOnly.endsWith("/shortlist") || pathOnly.endsWith("/contact-request")) return { ok: true, id: "mock-action" } as T;
+  if (pathOnly.startsWith("/recruiter/candidates/")) return { candidate: mockCandidate, profile, skillProof, latestResumeAnalysis: { resumeScore: 76, analyzedAt: new Date().toISOString() } } as T;
+  if (pathOnly === "/recruiter/shortlists") return { items: [{ id: "shortlist-1", status: "shortlisted", student: mockCandidate, job: recruiterJob, createdAt: new Date().toISOString() }] } as T;
+  if (pathOnly === "/recruiter/applications") return { items: [{ id: "rec-app-1", status: "applied", student: mockCandidate, job: recruiterJob, appliedAt: new Date().toISOString() }] } as T;
+  if (pathOnly === "/student/recruiter-jobs") return { items: [recruiterJob], total: 1, page: 1, limit: 20 } satisfies Paginated<RecruiterJob> as T;
+  if (pathOnly.endsWith("/apply") && pathOnly.startsWith("/student/recruiter-jobs/")) return { ok: true, status: "applied" } as T;
+  if (pathOnly.startsWith("/student/recruiter-jobs/")) return { ...recruiterJob, applied: false } as T;
+  if (pathOnly === "/student/recruiter-invites") return { items: [{ id: "invite-1", status: "invited", job: recruiterJob, organization: mockOrganization }] } as T;
+  if (pathOnly === "/student/contact-requests") return { items: [{ id: "contact-1", status: "pending", message: "We would like to discuss an internship.", organization: mockOrganization }] } as T;
+  if (pathOnly.startsWith("/student/contact-requests/") && pathOnly.endsWith("/respond")) return { ok: true, ...(options.body as Record<string, unknown>) } as T;
+  if (pathOnly === "/student/visibility" && method === "PUT") return { ok: true, ...(options.body as Record<string, unknown>) } as T;
+  if (pathOnly === "/student/visibility") return { visibility: "verified_recruiters", allowRecruiterContact: true, showEmail: false, showPhone: false, showResume: true, availabilityStatus: "available" } as T;
+  if (pathOnly === "/college/onboarding" && method === "POST") return { organization: mockCollegeOrganization, subscription: { ...mockSubscription, organizationId: mockCollegeOrganization.id, plan: mockPlans[2] } } as T;
+  if (pathOnly === "/college/settings") return mockCollegeOrganization as T;
+  if (pathOnly === "/college/team") return { members: [{ id: "college-member-1", role: "COLLEGE_ADMIN", user: { name: "College Admin" } }, { id: "college-member-2", role: "TPO_ADMIN", user: { name: "TPO Admin" } }] } as T;
+  if (pathOnly === "/admin/saas-dashboard") return { cards: { totalRevenue: 799800, monthlyRecurringRevenue: 599800, activeSubscriptions: 2, trialUsers: 1, totalColleges: 1, totalCompanies: 1, totalRecruiters: 2, failedPayments: 0 } } as T;
+  if (pathOnly === "/admin/organizations") return { items: [mockCollegeOrganization, mockOrganization] } as T;
+  if (pathOnly.startsWith("/admin/organizations/")) return { organization: mockOrganization, members: [{ id: "member-1", role: "COMPANY_ADMIN", user: { name: "Company Admin" } }], subscription: mockSubscription, payments: mockBilling.payments, logs: [] } as T;
+  if (pathOnly === "/admin/subscriptions") return { items: [mockSubscription] } as T;
+  if (pathOnly === "/admin/payments") return { items: mockBilling.payments } as T;
+  if (pathOnly === "/admin/revenue") return { totalRevenue: 799800, revenueByMonth: [{ month: "2026-06", revenue: 799800 }], recentPayments: mockBilling.payments } as T;
+  if (pathOnly === "/admin/account-logs") return { items: [{ id: "log-1", action: "activated", reason: "Demo tenant enabled", createdAt: new Date().toISOString() }] } as T;
   if (path === "/students/me") return profile as T;
   if (path === "/students/me/readiness") {
     return { score: 82, level: "Highly Ready", breakdown: { profile: 88, resume: 76, skills: 84, projects: 86, codingProfiles: 72 }, suggestions: ["Improve AWS proof", "Add one deployed backend project"] } satisfies Readiness as T;

@@ -24,6 +24,8 @@ type AuthResponse = {
 function destination(role: Role) {
   if (role === "STUDENT") return "/student/dashboard";
   if (role === "TPO_ADMIN") return "/tpo/dashboard";
+  if (role === "RECRUITER" || role === "COMPANY_ADMIN") return "/recruiter/dashboard";
+  if (role === "COLLEGE_ADMIN") return "/college/settings";
   return "/admin/overview";
 }
 
@@ -115,7 +117,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
               <div>
                 <CardTitle className="text-2xl">{isLogin ? "Welcome back" : "Create your workspace"}</CardTitle>
                 <CardDescription className="mt-2">
-                  {isLogin ? "Sign in to continue tracking placement readiness." : "Start with a student or TPO admin account."}
+                  {isLogin ? "Sign in to continue tracking placement readiness." : "Start with a student, TPO, or recruiter workspace."}
                 </CardDescription>
               </div>
             </CardHeader>
@@ -143,6 +145,8 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
                       <SelectContent>
                         <SelectItem value="STUDENT">Student</SelectItem>
                         <SelectItem value="TPO_ADMIN">TPO Admin</SelectItem>
+                        <SelectItem value="RECRUITER">Recruiter</SelectItem>
+                        <SelectItem value="COMPANY_ADMIN">Company Admin</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -157,7 +161,9 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
                 <br />
                 Accounts: <span className="font-mono text-foreground">student1@placemate.ai</span>,{" "}
                 <span className="font-mono text-foreground">tpo@placemate.ai</span>,{" "}
-                <span className="font-mono text-foreground">admin@placemate.ai</span>
+                <span className="font-mono text-foreground">admin@placemate.ai</span>,{" "}
+                <span className="font-mono text-foreground">recruiter@placemate.ai</span>,{" "}
+                <span className="font-mono text-foreground">company@placemate.ai</span>
               </div>
               <p className="text-center text-sm text-muted-foreground">
                 {isLogin ? "Need an account?" : "Already registered?"}{" "}

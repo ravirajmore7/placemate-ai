@@ -1,4 +1,4 @@
-export type Role = "STUDENT" | "TPO_ADMIN" | "COLLEGE_ADMIN" | "RECRUITER" | "SUPER_ADMIN";
+export type Role = "STUDENT" | "TPO_ADMIN" | "COLLEGE_ADMIN" | "RECRUITER" | "COMPANY_ADMIN" | "SUPER_ADMIN";
 
 export type User = {
   id: string;
@@ -278,4 +278,129 @@ export type StudentRoadmap = {
   roadmapJson?: Record<string, unknown>;
   drive?: Drive;
   tasks: RoadmapTask[];
+};
+
+export type Organization = {
+  id: string;
+  name: string;
+  type: string;
+  website?: string;
+  logoUrl?: string;
+  industry?: string;
+  size?: string;
+  location?: string;
+  status: string;
+  description?: string;
+  metadataJson?: Record<string, unknown>;
+};
+
+export type Plan = {
+  id: string;
+  name: string;
+  code: string;
+  audience: string;
+  description?: string;
+  priceMonthly: number;
+  priceYearly: number;
+  currency: string;
+  featuresJson: string[];
+  limitsJson: Record<string, string | number>;
+  active: boolean;
+};
+
+export type Subscription = {
+  id: string;
+  organizationId?: string;
+  userId?: string;
+  planId: string;
+  status: string;
+  billingCycle: string;
+  trialEndsAt?: string;
+  currentPeriodStart: string;
+  currentPeriodEnd?: string;
+  cancelAtPeriodEnd: boolean;
+  plan?: Plan | null;
+};
+
+export type Payment = {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  method?: string;
+  providerPaymentId?: string;
+  providerOrderId?: string;
+  paidAt?: string;
+  createdAt: string;
+};
+
+export type Invoice = {
+  id: string;
+  invoiceNumber: string;
+  amount: number;
+  currency: string;
+  status: string;
+  invoiceUrl?: string;
+  issuedAt: string;
+  paidAt?: string;
+};
+
+export type UsageSummary = {
+  items: Array<{ featureKey: string; used: number; limit: number | null; remaining: number | null }>;
+};
+
+export type RecruiterJob = {
+  id: string;
+  organizationId: string;
+  createdById: string;
+  title: string;
+  roleCategory?: string;
+  jobType: string;
+  workMode: string;
+  location: string;
+  ctc?: number;
+  stipend?: number;
+  experienceLevel?: string;
+  description: string;
+  requiredSkillsJson: string[];
+  preferredSkillsJson?: string[];
+  minimumCgpa: number;
+  allowedBranchesJson?: string[];
+  maxBacklogs: number;
+  hiringRoundsJson?: string[];
+  openings: number;
+  deadline: string;
+  visibility: string;
+  status: string;
+  organization?: Organization;
+};
+
+export type CandidateSummary = {
+  id: string;
+  name: string;
+  collegeName?: string;
+  branch?: string;
+  graduationYear?: number;
+  cgpa?: number;
+  location?: string;
+  targetRole?: string;
+  placementStatus?: string;
+  skills: string[];
+  topProjects?: Project[];
+  skillProofScore: number;
+  resumeScore: number;
+  githubScore: number;
+  leetcodeScore: number;
+  hackerRankScore: number;
+  matchScore: number;
+  canContact: boolean;
+  resumeVisible: boolean;
+};
+
+export type BillingOverview = {
+  subscription: Subscription | null;
+  payments: Payment[];
+  invoices: Invoice[];
+  usage: UsageSummary;
+  paymentsConfigured: boolean;
 };

@@ -1,12 +1,22 @@
 import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
+import { json, urlencoded } from "express";
 import type { NextFunction, Request, Response } from "express";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
   const config = app.get(ConfigService);
+
+  app.use(
+    json({
+      verify: (req: Request & { rawBody?: Buffer }, _res, buf) => {
+        req.rawBody = Buffer.from(buf);
+      }
+    })
+  );
+  app.use(urlencoded({ extended: true }));
 
   app.enableCors({
     origin: config.get<string>("WEB_ORIGIN")?.split(",") ?? true,

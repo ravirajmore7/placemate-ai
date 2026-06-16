@@ -1,14 +1,16 @@
 # PlaceMate AI / SkillProof AI
 
-Stage 1 + Stage 2 SaaS foundation for a smart placement intelligence platform. The product supports students, TPO admins, and super admins with auth, placement profiles, readiness scoring, company drives, eligibility checks, applications, shortlists, analytics, and the Stage 2 SkillProof AI Intelligence Layer.
+Stage 1 + Stage 2 + Stage 3 SaaS foundation for a smart placement intelligence platform. The product supports students, TPO admins, college admins, recruiters, company admins, and super admins with auth, placement profiles, readiness scoring, company drives, eligibility checks, applications, shortlists, analytics, SkillProof AI, recruiter workflows, and SaaS billing.
 
 Stage 2 converts GitHub, LeetCode, HackerRank, resume, project, and job-description signals into verified skill intelligence, company-wise fit scores, skill gap analysis, and personalized improvement roadmaps.
 
 Stage 2.5 optimizes local startup, dashboard rendering, API response size, report loading, and expensive AI workflows without changing the Stage 1 or Stage 2 product surface.
 
+Stage 3 adds the recruiter/company portal and SaaS payment foundation: company profiles, recruiter jobs, candidate discovery, shortlists, student privacy/contact controls, college tenant onboarding, plan limits, subscriptions, invoices, usage tracking, Razorpay checkout verification, and super-admin revenue/account operations.
+
 ## Features
 
-- JWT auth with role-based access for `STUDENT`, `TPO_ADMIN`, and `SUPER_ADMIN`
+- JWT auth with role-based access for `STUDENT`, `TPO_ADMIN`, `COLLEGE_ADMIN`, `RECRUITER`, `COMPANY_ADMIN`, and `SUPER_ADMIN`
 - Student placement profile with personal, academic, career, skill, project, education, resume, and coding profile data
 - Rule-based readiness score out of 100 with suggestions
 - TPO company drive creation and management
@@ -25,6 +27,11 @@ Stage 2.5 optimizes local startup, dashboard rendering, API response size, repor
 - Student improvement roadmaps with task completion
 - TPO Stage 2 reports for top students, weak skills, company fit, and skill gaps
 - Stage 2.5 lazy-loaded charts/tables, route skeletons, cached reports, paginated heavy lists, async resume-analysis jobs, and fast mock-API local mode
+- Recruiter portal with company profile, job posting, candidate search, shortlists, applications, contact requests, team management, and billing
+- Student recruiter surfaces for public recruiter jobs, recruiter invites, contact requests, and consent-based profile visibility
+- College onboarding/admin settings, college team view, subscription and billing screens
+- SaaS plans, subscriptions, payments, invoices, usage records, account status logs, and super-admin SaaS revenue dashboards
+- Razorpay order creation, checkout handoff, payment signature verification, webhook signature verification, and no card storage in PlaceMate AI
 
 ## Tech Stack
 
@@ -74,6 +81,15 @@ Important variables:
 - `RESUME_UPLOAD_MAX_SIZE`: max resume upload size expected by future storage layer
 - `ENABLE_LEETCODE_SYNC`: enables LeetCode public sync attempt with fallback
 - `ENABLE_HACKERRANK_SYNC`: reserved for future HackerRank API sync
+- `ENABLE_RECRUITER_PORTAL`: enables Stage 3 recruiter/company surfaces
+- `ENABLE_PAYMENTS`: enables billing checkout endpoints
+- `ENABLE_STUDENT_PRO_PLAN`: reserved flag for paid student plan rollout
+- `BILLING_TRIAL_DAYS`: default trial duration for created subscriptions
+- `CONTACT_SALES_EMAIL`: target email shown for enterprise sales
+- `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`: Razorpay API credentials used by the NestJS API
+- `RAZORPAY_WEBHOOK_SECRET`: webhook signing secret for `POST /webhooks/razorpay`
+- `RAZORPAY_CURRENCY`: defaults to `INR`
+- `NEXT_PUBLIC_RAZORPAY_KEY_ID`: browser-side Razorpay checkout key
 
 ## Local Setup
 
@@ -279,6 +295,74 @@ FastAPI SkillProof AI service:
 - `POST /generate-roadmap`
 - Compatibility aliases: `POST /calculate-readiness`, `POST /match-job`
 
+Stage 3 recruiter/company:
+
+- `GET /recruiter/dashboard`
+- `GET /recruiter/me`
+- `PUT /recruiter/me`
+- `GET /company/profile`
+- `PUT /company/profile`
+- `GET /company/team`
+- `POST /company/team/invite`
+- `DELETE /company/team/:memberId`
+- `GET /recruiter/jobs`
+- `POST /recruiter/jobs`
+- `GET /recruiter/jobs/:id`
+- `PUT /recruiter/jobs/:id`
+- `DELETE /recruiter/jobs/:id`
+- `PUT /recruiter/jobs/:id/status`
+- `GET /recruiter/jobs/:jobId/applications`
+- `GET /recruiter/candidates`
+- `GET /recruiter/candidates/:studentId`
+- `POST /recruiter/candidates/:studentId/view`
+- `POST /recruiter/candidates/:studentId/shortlist`
+- `POST /recruiter/candidates/:studentId/contact-request`
+- `GET /recruiter/shortlists`
+- `PUT /recruiter/shortlists/:id/status`
+- `GET /recruiter/applications`
+- `PUT /recruiter/applications/:id/status`
+
+Stage 3 student recruiter flow:
+
+- `GET /student/recruiter-jobs`
+- `GET /student/recruiter-jobs/:id`
+- `POST /student/recruiter-jobs/:id/apply`
+- `GET /student/recruiter-invites`
+- `GET /student/contact-requests`
+- `PUT /student/contact-requests/:id/respond`
+- `GET /student/visibility`
+- `PUT /student/visibility`
+
+Stage 3 college, billing, and SaaS admin:
+
+- `POST /college/onboarding`
+- `GET /college/settings`
+- `PUT /college/settings`
+- `GET /college/team`
+- `POST /college/team/invite`
+- `GET /college/billing`
+- `GET /plans`
+- `GET /plans/:code`
+- `GET /billing/current`
+- `POST /billing/create-checkout`
+- `POST /billing/create-subscription`
+- `POST /billing/change-plan`
+- `POST /billing/cancel`
+- `POST /payments/razorpay/verify`
+- `POST /webhooks/razorpay`
+- `GET /usage/current`
+- `POST /usage/check`
+- `POST /usage/increment`
+- `GET /admin/saas-dashboard`
+- `GET /admin/organizations`
+- `GET /admin/organizations/:id`
+- `PUT /admin/organizations/:id/status`
+- `GET /admin/subscriptions`
+- `PUT /admin/subscriptions/:id/override`
+- `GET /admin/payments`
+- `GET /admin/revenue`
+- `GET /admin/account-logs`
+
 ## Stage 2 Data Models
 
 Stage 2 extends the existing schema with:
@@ -296,6 +380,18 @@ Stage 2 extends the existing schema with:
 
 Existing Stage 1 models are preserved.
 
+## Stage 3 Data Models
+
+Stage 3 adds additive Prisma models for:
+
+- `Organization`, `OrganizationMember`, and `TeamInvitation`
+- `RecruiterProfile`, `RecruiterJob`, `RecruiterApplication`, `CandidateView`, `CandidateShortlist`, and `ContactRequest`
+- `Plan`, `Subscription`, `Payment`, `Invoice`, `UsageRecord`, `FeatureLimit`, and `BillingCustomer`
+- `StudentVisibilitySetting`
+- `AccountStatusLog`
+
+The Stage 3 migration also adds `COMPANY_ADMIN` to the `Role` enum. The new tables include indexes for tenant lookup, recruiter jobs, applications, candidate actions, billing records, usage counters, and admin audit logs.
+
 ## Stage 2 Student Flow
 
 1. Log in as a student.
@@ -312,6 +408,25 @@ Existing Stage 1 models are preserved.
 2. Review dashboard Stage 2 cards: average SkillProof, strong GitHub, strong LeetCode, weak resume, weak DSA.
 3. Open `Top Students`, `Skill Gaps`, `Drive Recommendations`, or `Weak Skills`.
 4. Select a drive in company-fit reports to view recommended students by match score.
+
+## Stage 3 Recruiter And SaaS Flow
+
+1. Log in as `recruiter@placemate.ai` or `company@placemate.ai`.
+2. Open `/recruiter/dashboard`, review usage/subscription state, and post a job from `/recruiter/jobs/create`.
+3. Search candidates at `/recruiter/candidates`, view a profile, shortlist, or send a contact request.
+4. Log in as a student and manage recruiter jobs, invites, contact requests, and privacy from the new student sidebar links.
+5. Log in as `college@placemate.ai` for college settings/team/billing pages.
+6. Log in as `admin@placemate.ai` and open `/admin/saas-dashboard` for revenue, organizations, subscriptions, payments, and account logs.
+
+## Razorpay Setup
+
+1. Add `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, and `NEXT_PUBLIC_RAZORPAY_KEY_ID` to local/prod env.
+2. In Razorpay, configure the webhook URL as `https://your-api-domain/webhooks/razorpay`.
+3. Subscribe the webhook to payment/order/subscription events used by your account.
+4. The API verifies checkout signatures through `POST /payments/razorpay/verify` and verifies webhook signatures with `RAZORPAY_WEBHOOK_SECRET`.
+5. PlaceMate AI stores payment/order/invoice metadata only. Card, UPI, or bank details remain inside Razorpay.
+
+When Razorpay keys are missing, checkout returns a safe mock/local response so Stage 3 screens still run in `npm run dev:fast`.
 
 ## Stage 2.5 Performance Testing
 
@@ -335,6 +450,8 @@ npm run dev:web
 ```
 
 Open `/student`, `/student/drives`, `/student/resume-analysis`, `/student/skillproof`, `/tpo`, and the Stage 2 TPO reports. The app shell should appear before heavy data, chart/table sections should show skeletons, resume analysis should show queued/processing progress, and backend logs should print endpoint duration with `[slow-api]` warnings for requests over one second.
+
+For Stage 3 smoke checks, open `/pricing`, `/recruiter/dashboard`, `/recruiter/jobs`, `/recruiter/candidates`, `/student/recruiter-jobs`, `/student/profile-visibility`, `/college/settings`, and `/admin/saas-dashboard`. In mock mode these routes should render without starting the API.
 
 ## Scoring Rules
 
@@ -365,11 +482,15 @@ Accounts:
 
 - Student: `student1@placemate.ai`
 - TPO Admin: `tpo@placemate.ai`
+- College Admin: `college@placemate.ai`
+- Company Admin: `company@placemate.ai`
+- Recruiter: `recruiter@placemate.ai`
+- Recruiter 2: `recruiter2@placemate.ai`
 - Super Admin: `admin@placemate.ai`
 
 ## Scope Notes
 
-Stage 2 intentionally does not include payments, WhatsApp, mobile apps, full recruiter portal, AI mock interviews, enterprise onboarding, or production Qdrant/BullMQ deployment. External platform passwords are never requested or stored.
+Stage 3 includes the recruiter portal and SaaS payment foundation. It does not include WhatsApp, mobile apps, AI mock interviews, production tax/compliance automation, or production Qdrant/BullMQ deployment. External platform passwords are never requested or stored.
 
 ## Future Roadmap
 
@@ -377,8 +498,8 @@ Stage 2 intentionally does not include payments, WhatsApp, mobile apps, full rec
 - Production background sync with Redis and BullMQ
 - Qdrant vector database for semantic matching
 - Cloud resume upload with virus scanning and retention controls
-- Recruiter portal and interview workflow
-- Razorpay subscriptions and college onboarding
+- Production recruiter interview scheduling workflow
+- Production Razorpay subscription plan IDs and invoice PDF delivery
 - Cloudflare R2 or AWS S3 resume storage
 - Advanced analytics, exports, and cohort benchmarking
 - AI mock interview and recruiter-ready verified student snapshots

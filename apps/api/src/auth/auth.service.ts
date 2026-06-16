@@ -38,6 +38,32 @@ export class AuthService {
       select: { id: true, name: true, email: true, role: true, createdAt: true }
     });
 
+    if (role === Role.RECRUITER || role === Role.COMPANY_ADMIN) {
+      const organization = await this.prisma.organization.create({
+        data: {
+          name: role === Role.COMPANY_ADMIN ? `${dto.name}'s Company` : `${dto.name}'s Recruiting Team`,
+          type: "COMPANY",
+          status: "active",
+          metadataJson: { source: "self_signup" }
+        }
+      });
+      await this.prisma.organizationMember.create({
+        data: {
+          organizationId: organization.id,
+          userId: user.id,
+          role
+        }
+      });
+      await this.prisma.recruiterProfile.create({
+        data: {
+          userId: user.id,
+          organizationId: organization.id,
+          fullName: dto.name,
+          verified: role === Role.COMPANY_ADMIN
+        }
+      });
+    }
+
     return {
       user,
       accessToken: this.signToken(user)
