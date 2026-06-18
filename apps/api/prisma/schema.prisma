@@ -906,3 +906,291 @@ model AccountStatusLog {
   @@index([userId])
   @@index([action])
 }
+
+model AIConversation {
+  id          String   @id @default(cuid())
+  userId      String?
+  role        String
+  module      String
+  title       String?
+  status      String   @default("active")
+  contextJson Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@index([role])
+  @@index([module])
+  @@index([status])
+}
+
+model CareerMentorChat {
+  id                  String   @id @default(cuid())
+  conversationId      String?
+  studentProfileId    String?
+  userId              String?
+  prompt              String
+  response            String
+  signalsJson         Json?
+  recommendationsJson Json?
+  createdAt           DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([studentProfileId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model PlacementPrediction {
+  id                          String   @id @default(cuid())
+  studentProfileId            String
+  placementProbability        Int      @default(0)
+  interviewSuccessProbability Int      @default(0)
+  offerProbability            Int      @default(0)
+  salaryMinLpa                Float    @default(0)
+  salaryMaxLpa                Float    @default(0)
+  riskLevel                   String
+  factorsJson                 Json?
+  recommendedActionsJson      Json?
+  modelVersion                String   @default("stage4-local-v1")
+  createdAt                   DateTime @default(now())
+
+  @@index([studentProfileId])
+  @@index([riskLevel])
+  @@index([createdAt])
+}
+
+model InterviewSession {
+  id               String    @id @default(cuid())
+  studentProfileId String?
+  userId           String?
+  mode             String
+  status           String    @default("active")
+  currentScore     Int       @default(0)
+  metadataJson     Json?
+  startedAt        DateTime  @default(now())
+  completedAt      DateTime?
+
+  @@index([studentProfileId])
+  @@index([userId])
+  @@index([mode])
+  @@index([status])
+}
+
+model InterviewQuestion {
+  id                     String   @id @default(cuid())
+  interviewSessionId     String
+  order                  Int      @default(0)
+  question               String
+  followUpsJson          Json?
+  evaluationCriteriaJson Json?
+  expectedSignalsJson    Json?
+  createdAt              DateTime @default(now())
+
+  @@index([interviewSessionId])
+}
+
+model InterviewEvaluation {
+  id                  String   @id @default(cuid())
+  interviewSessionId  String
+  communicationScore  Int      @default(0)
+  confidenceScore     Int      @default(0)
+  technicalScore      Int      @default(0)
+  problemSolvingScore Int      @default(0)
+  overallScore        Int      @default(0)
+  feedbackJson        Json?
+  createdAt           DateTime @default(now())
+
+  @@index([interviewSessionId])
+  @@index([overallScore])
+}
+
+model JobEmbedding {
+  id            String   @id @default(cuid())
+  sourceType    String   @default("recruiter_job")
+  jobId         String
+  text          String
+  vectorJson    Json?
+  provider      String   @default("local-hash")
+  dimensions    Int      @default(32)
+  embeddingHash String?
+  metadataJson  Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([provider, embeddingHash])
+  @@index([jobId])
+  @@index([sourceType])
+}
+
+model CandidateEmbedding {
+  id               String   @id @default(cuid())
+  studentProfileId String
+  text             String
+  vectorJson       Json?
+  provider         String   @default("local-hash")
+  dimensions       Int      @default(32)
+  embeddingHash    String?
+  metadataJson     Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([provider, embeddingHash])
+  @@index([studentProfileId])
+}
+
+model ResumeEmbedding {
+  id               String   @id @default(cuid())
+  resumeAnalysisId String?
+  studentProfileId String?
+  text             String
+  vectorJson       Json?
+  provider         String   @default("local-hash")
+  dimensions       Int      @default(32)
+  embeddingHash    String?
+  metadataJson     Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([provider, embeddingHash])
+  @@index([resumeAnalysisId])
+  @@index([studentProfileId])
+}
+
+model RoadmapPlan {
+  id               String   @id @default(cuid())
+  studentProfileId String?
+  userId           String?
+  targetRole       String
+  durationDays     Int
+  planJson         Json
+  status           String   @default("ACTIVE")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([studentProfileId])
+  @@index([userId])
+  @@index([targetRole])
+  @@index([status])
+}
+
+model SkillGapAnalysis {
+  id                          String   @id @default(cuid())
+  studentProfileId            String?
+  recruiterJobId              String?
+  driveId                     String?
+  query                       String?
+  missingSkillsJson           Json?
+  suggestedCertificationsJson Json?
+  suggestedProjectsJson       Json?
+  roadmapJson                 Json?
+  marketSkillsJson            Json?
+  createdAt                   DateTime @default(now())
+
+  @@index([studentProfileId])
+  @@index([recruiterJobId])
+  @@index([driveId])
+  @@index([createdAt])
+}
+
+model Assessment {
+  id                   String   @id @default(cuid())
+  title                String
+  type                 String
+  roleCategory         String?
+  difficulty           String   @default("INTERMEDIATE")
+  durationMinutes      Int      @default(60)
+  questionsJson        Json
+  evaluationConfigJson Json?
+  createdById          String?
+  status               String   @default("draft")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([type])
+  @@index([roleCategory])
+  @@index([status])
+  @@index([createdById])
+}
+
+model AssessmentAttempt {
+  id                String    @id @default(cuid())
+  assessmentId      String
+  studentProfileId  String?
+  userId            String?
+  status            String    @default("started")
+  score             Int       @default(0)
+  answersJson       Json?
+  antiCheatLogsJson Json?
+  evaluationJson    Json?
+  leaderboardRank   Int?
+  startedAt         DateTime  @default(now())
+  submittedAt       DateTime?
+
+  @@index([assessmentId])
+  @@index([studentProfileId])
+  @@index([userId])
+  @@index([status])
+  @@index([score])
+}
+
+model PortfolioGeneration {
+  id               String   @id @default(cuid())
+  studentProfileId String?
+  userId           String?
+  type             String
+  title            String
+  contentJson      Json
+  exportFormat     String
+  exportPayload    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([studentProfileId])
+  @@index([userId])
+  @@index([type])
+}
+
+model CandidateRecommendation {
+  id                String   @id @default(cuid())
+  recruiterJobId    String?
+  driveId           String?
+  recruiterId       String?
+  studentProfileId  String
+  matchScore        Int      @default(0)
+  hiringConfidence  Int      @default(0)
+  riskFactorsJson   Json?
+  missingSkillsJson Json?
+  reasonsJson       Json?
+  source            String   @default("ai_matching")
+  createdAt         DateTime @default(now())
+
+  @@index([recruiterJobId])
+  @@index([driveId])
+  @@index([recruiterId])
+  @@index([studentProfileId])
+  @@index([matchScore])
+}
+
+model AIUsageMetric {
+  id               String   @id @default(cuid())
+  userId           String?
+  organizationId   String?
+  role             String?
+  featureKey       String
+  provider         String   @default("local")
+  model            String   @default("stage4-local-v1")
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  totalTokens      Int      @default(0)
+  estimatedCostInr Float    @default(0)
+  latencyMs        Int?
+  metadataJson     Json?
+  createdAt        DateTime @default(now())
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([role])
+  @@index([featureKey])
+  @@index([createdAt])
+}

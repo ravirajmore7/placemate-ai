@@ -1,7 +1,9 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { AdminModule } from "./admin/admin.module";
+import { AiModule } from "./ai/ai.module";
 import { ApplicationsModule } from "./applications/applications.module";
+import { AssessmentsModule } from "./assessments/assessments.module";
 import { AuthModule } from "./auth/auth.module";
 import { DrivesModule } from "./drives/drives.module";
 import { PrismaModule } from "./prisma/prisma.module";
@@ -15,6 +17,8 @@ import { TpoModule } from "./tpo/tpo.module";
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     AuthModule,
+    AiModule,
+    AssessmentsModule,
     StudentsModule,
     DrivesModule,
     ApplicationsModule,
